@@ -341,6 +341,53 @@ class TestCLIStreaming(unittest.TestCase):
             # No need to clean up _Converter state since it's instance-based
             return False
 
+    def test_fix_message_list_allows_multiple_tool_results(self):
+        """Test one assistant message can be followed by multiple tool results."""
+        from cai.util import fix_message_list
+
+        messages = [
+            {"role": "user", "content": "Run three checks"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "function": {"name": "tool_a", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_b",
+                        "type": "function",
+                        "function": {"name": "tool_b", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_c",
+                        "type": "function",
+                        "function": {"name": "tool_c", "arguments": "{}"},
+                    },
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_a", "content": "result a"},
+            {"role": "tool", "tool_call_id": "call_b", "content": "result b"},
+            {"role": "tool", "tool_call_id": "call_c", "content": "result c"},
+        ]
+
+        fixed_messages = fix_message_list(messages)
+
+        assert [msg["role"] for msg in fixed_messages] == [
+            "user",
+            "assistant",
+            "tool",
+            "tool",
+            "tool",
+        ]
+        assert [
+            msg.get("tool_call_id")
+            for msg in fixed_messages
+            if msg.get("role") == "tool"
+        ] == ["call_a", "call_b", "call_c"]
+
     def test_generic_linux_command_interrupt_simulation(self):
         """Test generic_linux_command behavior during interruption."""
 
