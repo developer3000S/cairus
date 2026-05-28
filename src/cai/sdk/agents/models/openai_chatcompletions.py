@@ -3573,6 +3573,8 @@ class OpenAIChatCompletionsModel(Model):
 
     def _intermediate_logs(self):
         """Intermediate logging if conditions are met."""
+        if os.getenv("CAI_TELEMETRY", "true").lower() == "false":
+            return
         if (
             self.logger
             and self.interaction_counter > 0
