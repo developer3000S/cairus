@@ -2700,9 +2700,14 @@ class OpenAIChatCompletionsModel(Model):
         model_str = str(kwargs["model"]).lower()
 
         if "alias" in model_str and "alias1.5" not in model_str:  # NOTE: exclude alias1.5
+            alias_api_key = os.getenv("ALIAS_API_KEY")
+            if not alias_api_key:
+                raise ValueError(
+                    "Error: ALIAS_API_KEY environment variable is not set."                    
+                )
             kwargs["api_base"] = "https://api.aliasrobotics.com:666/"
             kwargs["custom_llm_provider"] = "openai"
-            kwargs["api_key"] = os.getenv("ALIAS_API_KEY", "REDACTED_ALIAS_KEY")
+            kwargs["api_key"] = alias_api_key
         elif "/" in model_str:
             # Handle provider/model format
             provider = model_str.split("/")[0]
