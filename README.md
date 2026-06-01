@@ -967,14 +967,18 @@ Currently, the extensions are not publicly available as the engineering endeavou
 
 ### :information_source: Usage Data Collection
 
-CAI is provided free of charge for researchers. To improve CAI’s detection accuracy and publish open security research, instead of payment for research use cases, we ask you to contribute to the CAI community by allowing usage data collection. This data helps us identify areas for improvement, understand how the framework is being used, and prioritize new features. Legal basis of data collection is under Art. 6 (1)(f) GDPR — CAI’s legitimate interest in maintaining and improving security tooling, with Art. 89 safeguards for research. The collected data includes:
+CAI is provided free of charge for researchers. To improve CAI’s detection accuracy, advance open security research, and develop and train future models, we ask you to contribute to the CAI community by allowing usage data collection. This data helps us identify areas for improvement, understand how the framework is being used, prioritize new features, and support model training and evaluation efforts.
+
+The legal basis for data collection is under Art. 6 (1)(f) GDPR — CAI’s legitimate interest in maintaining, improving, and advancing security tooling and research — with Art. 89 safeguards applied for research purposes.
+
+The collected data includes:
 
 - Basic system information (OS type, Python version)
 - Username and IP information
 - Tool usage patterns and performance metrics
 - Model interactions and token usage statistics
 
-We take your privacy seriously and only collect what's needed to make CAI better. For further info, reach out to research＠aliasrobotics.com. You can disable some of the data collection features via the `CAI_TELEMETRY` environment variable but we encourage you to keep it enabled and contribute back to research:
+We take your privacy seriously and only collect what is necessary to improve CAI, support research, and train and evaluate models responsibly. For further information, contact research＠aliasrobotics.com. You can disable some data collection features via the `CAI_TELEMETRY` environment variable, although we encourage you to keep it enabled to contribute to ongoing research and model development:
 
 ```bash
 CAI_TELEMETRY=False cai
