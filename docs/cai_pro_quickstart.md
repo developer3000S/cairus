@@ -228,18 +228,12 @@ CAI> Perform recon on https://bugbounty-target.com for a bug bounty program
 
 ## Advanced Configuration
 
-### Enable Context Monitoring
+### Check usage and costs
 
-Track your token usage in real-time:
+Use **`/cost`** for session spend and token stats; use **`/compact`** when histories grow long.
 
 ```bash
-CAI> /context
-
-# Shows:
-# - Total tokens used/available
-# - Breakdown by category (system, tools, memory, messages)
-# - Visual grid representation
-# - Optimization suggestions
+CAI> /cost
 ```
 
 ### Multi-Agent Parallel Execution
@@ -291,10 +285,9 @@ cai --version
 
 ### Issue: "Rate limit exceeded"
 
-**This shouldn't happen with CAI PRO** (unlimited tokens). If you see this:
+The client will automatically pause until the appropriate time frame has passed and then retry the iteration without interrupting the session. 
 
-1. Check for typos in your `ALIAS_API_KEY`
-2. Contact support immediately: support@aliasrobotics.com
+If this is happening frequently, consider compacting the context with `/compact`.
 
 ---
 
@@ -365,7 +358,7 @@ Learn from real-world CAI applications:
 ### 🎯 Best Practices
 
 1. **Start with clear prompts**: Be specific about your testing scope and objectives
-2. **Use context monitoring**: Check `/context` regularly to optimize token usage
+2. **Watch costs and thread length**: Use `/cost` and `/compact` as sessions grow
 3. **Leverage parallel execution**: Run multiple agents for comprehensive coverage
 4. **Save your sessions**: Use `/save` to preserve important conversations
 5. **Enable guardrails**: Keep `CAI_GUARDRAILS=true` for safer operations
