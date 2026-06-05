@@ -1,5 +1,5 @@
 """Replay Attack and Counteroffensive Agent
-Specialized agent module focused on network replay attacks, packet manipulation, 
+Specialized agent module focused on network replay attacks, packet manipulation,
 and counteroffensive techniques for security testing and incident response.
 This agent specializes in:
 - Network packet capture and analysis
@@ -17,37 +17,39 @@ Objectives:
 - Evaluate defensive controls against replay attacks
 """
 
-
-import os
 from openai import AsyncOpenAI
 from cai.sdk.agents import Agent, OpenAIChatCompletionsModel  # pylint: disable=import-error
 from cai.util import load_prompt_template, create_system_prompt_renderer
+from cai.config import get_config
 from dotenv import load_dotenv
 from cai.tools.command_and_control.sshpass import (  # pylint: disable=import-error # noqa: E501
-    run_ssh_command_with_credentials
+    run_ssh_command_with_credentials,
 )
 
 from cai.tools.reconnaissance.generic_linux_command import (  # pylint: disable=import-error # noqa: E501
-    generic_linux_command
-)
-from cai.tools.web.search_web import (  # pylint: disable=import-error # noqa: E501
-    make_web_search_with_explanation
+generic_linux_command,
 )
 
 from cai.tools.reconnaissance.exec_code import (  # pylint: disable=import-error # noqa: E501
-    execute_code
+    execute_code,
+)
+from cai.tools.web.search_web import (  # pylint: disable=import-error # noqa: E501
+    make_web_search_with_explanation,
 )
 
 # Import network tools
 from cai.tools.network.capture_traffic import (  # pylint: disable=import-error # noqa: E501
     capture_remote_traffic,
-    remote_capture_session
+    remote_capture_session,
 )
+
+load_dotenv()
+_cfg = get_config()
 
 # Prompts
 replay_attack_agent_prompt = load_prompt_template("prompts/system_replay_attack_agent.md")
 
-# Define tools list based on available tools
+# Define tools list based on available API keys (via CAIConfig) [S]
 tools = [
     generic_linux_command,
     run_ssh_command_with_credentials,
@@ -56,21 +58,23 @@ tools = [
     remote_capture_session,
 ]
 
-# Add conditional tools based on available API keys
-if os.getenv('PERPLEXITY_API_KEY'):
+# Add conditional tools based on available API keys [S]
+if _cfg.perplexity_api_key:
     tools.append(make_web_search_with_explanation)
 
 
 # Create the agent instance
 replay_attack_agent = Agent(
     name="Replay Attack Agent",
-    instructions=create_system_prompt_renderer(replay_attack_agent_prompt),
+    instructions=create_system_prompt_renderer(
+        replay_attack_agent_prompt,
+        cyber_micro_profile_key="replay",
+    ),
     description="""Agent that specializes in network replay attacks and counteroffensive techniques.
                    Expert in packet manipulation, traffic replay, and protocol exploitation.""",
     model=OpenAIChatCompletionsModel(
-        model=os.getenv('CAI_MODEL', "alias1"),
+        model=_cfg.model,
         openai_client=AsyncOpenAI(),
     ),
     tools=tools,
 )
-

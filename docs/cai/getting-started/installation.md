@@ -4,6 +4,26 @@
 pip install cai-framework
 ```
 
+## Using CAI with Claude Code, Codex, and OpenCode
+
+You can use CAI with different coding assistants while keeping the same repository and environment.
+
+### Recommended setup
+
+1. Use one project-local virtual environment.
+2. Keep a single `.env` file for CAI configuration.
+3. Reuse the same branch/worktree across assistants.
+4. Validate CAI behavior from the terminal after assistant-driven edits.
+
+### Assistant-agnostic workflow
+
+- Edit and plan with your preferred assistant (Claude Code, Codex, or OpenCode).
+- Run CAI commands from the same project terminal/session.
+- For multi-agent execution, use:
+  - `/parallel add ...`
+  - `/parallel run`
+  - `/merge` (or `/parallel clear` to exit without merge)
+
 ## OS X
 ```bash
 # Install homebrew
@@ -71,6 +91,8 @@ Go to the Microsoft page: `https://learn.microsoft.com/en-us/windows/wsl/install
 Here you will find all the instructions to install WSL
 
 From Powershell write: ` wsl --install`
+
+For **packet capture** on WSL2 (`tcpdump` / `tshark`), see [Packet capture on WSL2](packet_capture_wsl.md) (`setcap`, Docker `NET_RAW`, valid PCAP vs text substitutes).
 
 ```bash
 sudo apt-get update && \

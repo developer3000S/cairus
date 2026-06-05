@@ -15,7 +15,7 @@ blue_team_red_team_shared_context_pattern = {
     "description": "Red and blue team agent with shared context",
     "configs": [
         ParallelConfig("redteam_agent", unified_context=True),
-        ParallelConfig("blueteam_agent", unified_context=True)
+        ParallelConfig("blueteam_agent", unified_context=True),
     ],
-    "unified_context": True
+    "unified_context": True,
 }

@@ -16,7 +16,7 @@ The OPENAI_API_KEY must not be left blank. It should contain either "sk-123" (as
 
 For a complete reference organized by use case, see [Environment Variables Reference](../../environment_variables.md).
 
-**In the REPL:** `/env list` shows the catalog with **current values** and index numbers; bare `/env` shows `CAI_*` / `CTF_*` in this session. **`/help`** includes the **full environment reference** (tables) after the quick guide; **`/help var NAME`** opens **long-form** help for a single variable. See also [Environment Variables — Discovering variables in the REPL](../../environment_variables.md#discovering-variables-in-the-repl).
+**In the REPL:** `/env list` shows variables with **current values** and index numbers; bare **`/env`** shows **`CAI_*`** / **`CTF_*`** values in the current session. **`/help`** includes the **full environment reference** (tables) after the quick guide; **`/help var NAME`** opens **long-form** help for a single variable. **`/config`** is deprecated and only prints a pointer to **`/env`**. See also [Environment Variables — Discovering variables in the REPL](../../environment_variables.md#discovering-variables-in-the-repl).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -29,24 +29,26 @@ For a complete reference organized by use case, see [Environment Variables Refer
 | CAI_DEBUG | Set debug output level (0: Only tool outputs, 1: Verbose debug output, 2: CLI debug output) | 1 |
 | CAI_BRIEF | Enable/disable brief output mode | false |
 | CAI_MAX_TURNS | Maximum number of turns for agent interactions | inf |
+| CAI_ORCHESTRATION_WORKER_MAX_TURNS | Max `Runner` turns per specialist worker spawned by `orchestration_agent` tools (`run_specialist`, `run_dual_approach_contest`, `run_parallel_specialists`). Integer 1–32 | 6 |
+| CAI_ORCHESTRATION_MAS_HINT | When `true`, `orchestration_agent` may receive one synthetic `user`-role nudge per `Runner` run if the prompt looks multi-front but only `run_specialist` ran (suggests parallel or contest tools). Set `false` to disable | true |
 | CAI_MAX_INTERACTIONS | Maximum number of interactions (tool calls, agent actions, etc.) allowed in a session. If exceeded, only CLI commands are allowed until increased. If force_until_flag=true, the session will exit | inf |
 | CAI_PRICE_LIMIT | Price limit for the conversation in dollars. If exceeded, only CLI commands are allowed until increased. If force_until_flag=true, the session will exit | 1 |
 | CAI_TRACING | Enable/disable OpenTelemetry tracing. When enabled, traces execution flow and agent interactions for debugging and analysis | true |
-| CAI_AGENT_TYPE | Specify the agents to use (e.g., boot2root, one_tool, redteam_agent). Use "/agent" command in CLI to list all available agents | redteam_agent |
+| CAI_AGENT_TYPE | Registered agent key. Defaults to `orchestration_agent` (breadth-first entry: specialist tools `run_specialist`, `run_dual_approach_contest`, `run_parallel_specialists` plus handoffs). Use `selection_agent` for a handoff-only router without those tools, or pin a specialist such as `redteam_agent` | orchestration_agent |
 | CAI_STATE | Enable/disable stateful mode. When enabled, the agent will use a state agent to keep track of the state of the network and the flags found | false |
-| CAI_MEMORY | Enable/disable memory mode (episodic: use episodic memory, semantic: use semantic memory, all: use both episodic and semantic memory) | false |
-| CAI_MEMORY_ONLINE | Enable/disable online memory mode | false |
-| CAI_MEMORY_OFFLINE | Enable/disable offline memory | false |
+| CAI_COMPACTED_MEMORY | When true, inject `/compact` conversation summaries into agent system prompts | false |
 | CAI_ENV_CONTEXT | Add environment context, dirs and current env available | true |
-| CAI_MEMORY_ONLINE_INTERVAL | Number of turns between online memory updates | 5 |
 | CAI_SUPPORT_MODEL | Model to use for the support agent | o3-mini |
 | CAI_SUPPORT_INTERVAL | Number of turns between support agent executions | 5 |
-| CAI_STREAM | Enable/disable streaming output in rich panel | false |
+| CAI_STREAM | Enable/disable streaming output for LLM inference (token-by-token display). Does NOT affect tool output | false |
+| CAI_TOOL_STREAM | Enable/disable streaming output for tool executions (real-time command output). Independent of CAI_STREAM | true |
+| CAI_DEBUG_TOOLS_VIZ | Enable debug output for tool visualization and panel rendering | false |
+| CAI_SHOW_CACHE | Show cache information and message history list | false |
 | CAI_TELEMETRY | Enable/disable telemetry | true |
 | CAI_PARALLEL | Number of parallel agent instances to run. When set to values greater than 1, executes multiple instances of the same agent in parallel and displays all results | 1 |
 | CAI_GUARDRAILS | Enable/disable security guardrails for agents. When set to "true", applies security guardrails to prevent potentially dangerous outputs and inputs | false |
 | CAI_GCTR_NITERATIONS | Number of tool interactions before triggering GCTR (Generative Cut-The-Rope) analysis in bug_bounter_gctr agent. Only applies when using gctr-enabled agents | 5 |
-| CAI_ACTIVE_CONTAINER | Docker container ID where commands should be executed. When set, shell commands and tools execute inside the specified container instead of the host. Automatically set when CTF challenges start (if CTF_INSIDE=true) or when switching containers via /virtualization command | - |
+| CAI_ACTIVE_CONTAINER | Docker container ID where commands should be executed. When set, shell commands and tools execute inside the specified container instead of the host. Automatically set when CTF challenges start (if CTF_INSIDE=true) or when attaching a container via `/virtualization` / `/virt` in the REPL | - |
 | CAI_TOOL_TIMEOUT | Override the default timeout for tool command executions in seconds. When set, this value overrides all default timeouts for shell commands and tool executions | varies (10s for interactive, 100s for regular) |
 
 ## Custom OpenAI Base URL Support

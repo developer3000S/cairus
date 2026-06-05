@@ -36,7 +36,7 @@ where:
 | **Agentic Pattern** | **Description** |
 |--------------------|------------------------|
 | `Swarm` (Decentralized) | Agents share tasks and self-assign responsibilities without a central orchestrator. Handoffs occur dynamically. *An example of a peer-to-peer agentic pattern is the `CTF Agentic Pattern`, which involves a team of agents working together to solve a CTF challenge with dynamic handoffs.* |
-| `Hierarchical` | A top-level agent (e.g., "PlannerAgent") assigns tasks via structured handoffs to specialized sub-agents. Alternatively, the structure of the agents is hardcoded into the agentic pattern with pre-defined handoffs. |
+| `Hierarchical` | A top-level agent (e.g., "PlannerAgent") assigns tasks via structured handoffs to specialized sub-agents. Alternatively, the structure of the agents is harcoded into the agentic pattern with pre-defined handoffs. |
 | `Chain-of-Thought` (Sequential Workflow) | A structured pipeline where Agent A produces an output, hands it to Agent B for reuse or refinement, and so on. Handoffs follow a linear sequence. *An example of a chain-of-thought agentic pattern is the `ReasonerAgent`, which involves a Reasoning-type LLM that provides context to the main agent to solve a CTF challenge with a linear sequence.*[^1] |
 | `Auction-Based` (Competitive Allocation) | Agents "bid" on tasks based on priority, capability, or cost. A decision agent evaluates bids and hands off tasks to the best-fit agent. |
 | `Recursive` | A single agent continuously refines its own output, treating itself as both executor and evaluator, with handoffs (internal or external) to itself. *An example of a recursive agentic pattern is the `CodeAgent` (when used as a recursive agent), which continuously refines its own output by executing code and updating its own instructions.* |
@@ -51,11 +51,6 @@ import pkgutil
 from typing import Dict
 
 from dotenv import load_dotenv  # pylint: disable=import-error # noqa: E501
-
-# Load .env file from current directory before importing agents
-# This ensures that .env files in the user's working directory are loaded
-# even when CAI is installed from PyPI
-load_dotenv(override=True)  # override=True ensures env vars from .env take precedence
 
 # Local application imports
 from cai.agents.flag_discriminator import flag_discriminator, transfer_to_flag_discriminator
@@ -121,11 +116,30 @@ def get_available_agents() -> Dict[str, Agent]:  # pylint: disable=R0912  # noqa
                             agents_to_display[agent_name] = attr
             except (ImportError, AttributeError) as e:
                 # Extract module name from the full import path
-                module_short_name = name.split('.')[-1]
+                module_short_name = name.split(".")[-1]
                 print(f"Error importing {module_short_name}: {e}")
+    
+    # Also check the personal subdirectory
+    personal_path = os.path.join(os.path.dirname(__file__), "personal")
+    if os.path.exists(personal_path) and os.path.isdir(personal_path):
+        for _, name, _ in pkgutil.iter_modules([personal_path], __name__ + ".personal."):
+            try:
+                module = importlib.import_module(name)
+                # Look for Agent instances in the personal module
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if isinstance(attr, Agent) and not attr_name.startswith("_"):
+                        agent_name = attr_name
+                        if agent_name not in agents_to_display:
+                            agents_to_display[agent_name] = attr
+            except (ImportError, AttributeError) as e:
+                # Extract module name from the full import path
+                module_short_name = name.split(".")[-1]
+                print(f"Error importing personal agent {module_short_name}: {e}")
 
     # Add all patterns (parallel, swarm, etc.) as pseudo-agents
     from cai.agents.patterns import PATTERNS
+
     for pattern_name, pattern_obj in PATTERNS.items():
         # Create a pseudo-agent object for the pattern
         class PatternAgent:
@@ -133,7 +147,7 @@ def get_available_agents() -> Dict[str, Agent]:  # pylint: disable=R0912  # noqa
                 self.name = pattern.name
                 self.description = pattern.description
                 # Get the string value of the enum
-                if hasattr(pattern.type, 'value'):
+                if hasattr(pattern.type, "value"):
                     self.pattern_type = pattern.type.value
                 else:
                     self.pattern_type = str(pattern.type)
@@ -144,11 +158,35 @@ def get_available_agents() -> Dict[str, Agent]:  # pylint: disable=R0912  # noqa
                 self.handoffs = []
                 self.model = None
                 self.output_type = None
-        
+
         pseudo_agent = PatternAgent(pattern_obj)
         agents_to_display[pattern_name] = pseudo_agent
 
+    # Inject meta agent toggle if defined
+    try:
+        from cai.agents import META_AGENT_TOGGLE as _MAT
+        if _MAT and "meta_agent" not in agents_to_display:
+            agents_to_display["meta_agent"] = _MAT
+    except Exception:
+        pass
+
     return agents_to_display
+
+
+# Append a pseudo-entry to toggle the Meta Agent from UI/agent list
+try:
+    class MetaAgentToggle:
+        name = "meta_agent"
+        description = "Toggle CAI Meta Agent (global TUI orchestrator). Select to enable CAI_META_AGENT=True."
+        instructions = "Meta controller for TUI orchestration and context merging."
+        tools = []
+        handoffs = []
+        model = None
+        output_type = None
+    # Expose via module attribute so get_available_agents can merge it
+    META_AGENT_TOGGLE = MetaAgentToggle()
+except Exception:  # pragma: no cover - defensive
+    META_AGENT_TOGGLE = None
 
 
 def get_agent_module(agent_name: str) -> str:
@@ -188,16 +226,32 @@ def get_agent_module(agent_name: str) -> str:
                         return name
             except (ImportError, AttributeError):
                 pass
+    
+    # Also check the personal subdirectory
+    personal_path = os.path.join(os.path.dirname(__file__), "personal")
+    if os.path.exists(personal_path) and os.path.isdir(personal_path):
+        for _, name, _ in pkgutil.iter_modules([personal_path], __name__ + ".personal."):
+            try:
+                module = importlib.import_module(name)
+                # Look for Agent instances in the personal module
+                for attr_name in dir(module):
+                    if (attr_name == agent_name) and isinstance(getattr(module, attr_name), Agent):
+                        return name
+            except (ImportError, AttributeError):
+                pass
 
     return "unknown"
 
 
-def get_agent_by_name(agent_name: str, custom_name: str = None, model_override: str = None, agent_id: str = None) -> Agent:
+def get_agent_by_name(
+    agent_name: str, custom_name: str = None, model_override: str = None, agent_id: str = None
+) -> Agent:
     """
     Get a NEW agent instance by name using the dynamic factory system.
 
     Args:
-        agent_name: Name of the agent to retrieve
+        agent_name: Name of the agent to retrieve (can be display name like "Red Team Agent"
+                   or agent type like "redteam_agent")
         custom_name: Optional custom name for the agent instance (e.g., "Bug Bounter #1")
         model_override: Optional model to use instead of the default
         agent_id: Optional agent ID (e.g., "P1", "P2", "P3")
@@ -208,6 +262,29 @@ def get_agent_by_name(agent_name: str, custom_name: str = None, model_override: 
     Raises:
         ValueError: If the agent name is not found
     """
+    # Map display names to agent types for backwards compatibility with logs
+    display_name_to_type = {
+        "red team agent": "redteam_agent",
+        "red teamer": "redteam_agent",
+        "blue team agent": "blueteam_agent",
+        "blue teamer": "blueteam_agent",
+        "bug bounter": "bug_bounter_agent",
+        "bug bounter agent": "bug_bounter_agent",
+        "ctf agent": "one_tool_agent",
+        "summary agent": "redteam_agent",  # Default to redteam if Summary Agent
+        "agent": "redteam_agent",  # Default generic "Agent" to redteam
+        "risk & compliance agent": "compliance_agent",
+        "compliance agent": "compliance_agent",
+        "grc agent": "compliance_agent",
+        "continuous ops agent": "continuous_ops_agent",
+        "continuous ops": "continuous_ops_agent",
+    }
+
+    # Normalize agent name - try display name mapping first
+    agent_name_normalized = agent_name.lower().strip()
+    if agent_name_normalized in display_name_to_type:
+        agent_name = display_name_to_type[agent_name_normalized]
+
     # Import the generic factory system
     from cai.agents.factory import get_agent_factory
 
@@ -257,28 +334,30 @@ def get_agent_by_name(agent_name: str, custom_name: str = None, model_override: 
                 # Update the agent's name if custom name provided
                 if custom_name:
                     cloned_agent.name = custom_name
-                    
+
                 # Check if this agent has any MCP tools configured
                 try:
                     from cai.repl.commands.mcp import get_mcp_tools_for_agent
-                    
+
                     # Get MCP tools for this agent and add them
                     mcp_tools = get_mcp_tools_for_agent(agent_name_lower)
                     if mcp_tools:
                         # Ensure the agent has tools list
-                        if not hasattr(cloned_agent, 'tools'):
+                        if not hasattr(cloned_agent, "tools"):
                             cloned_agent.tools = []
-                        
+
                         # Remove any existing tools with the same names to avoid duplicates
                         existing_tool_names = {t.name for t in mcp_tools}
-                        cloned_agent.tools = [t for t in cloned_agent.tools if t.name not in existing_tool_names]
-                        
+                        cloned_agent.tools = [
+                            t for t in cloned_agent.tools if t.name not in existing_tool_names
+                        ]
+
                         # Add the MCP tools
                         cloned_agent.tools.extend(mcp_tools)
                 except ImportError:
                     # MCP command not available, skip
                     pass
-                    
+
                 return cloned_agent
         except Exception:
             # If cloning fails, return the original
@@ -287,22 +366,22 @@ def get_agent_by_name(agent_name: str, custom_name: str = None, model_override: 
     # For singleton agents without cloning, still check for MCP tools
     try:
         from cai.repl.commands.mcp import get_mcp_tools_for_agent
-        
+
         # Get MCP tools for this agent and add them
         mcp_tools = get_mcp_tools_for_agent(agent_name_lower)
         if mcp_tools:
             # Ensure the agent has tools list
-            if not hasattr(agent, 'tools'):
+            if not hasattr(agent, "tools"):
                 agent.tools = []
-            
+
             # Remove any existing tools with the same names to avoid duplicates
             existing_tool_names = {t.name for t in mcp_tools}
             agent.tools = [t for t in agent.tools if t.name not in existing_tool_names]
-            
+
             # Add the MCP tools
             agent.tools.extend(mcp_tools)
     except ImportError:
         # MCP command not available, skip
         pass
-    
+
     return agent

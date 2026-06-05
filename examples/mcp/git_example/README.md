@@ -10,7 +10,7 @@ uv run python examples/mcp/git_example/main.py
 
 ## Details
 
-The example uses the `MCPServerStdio` class from `agents.mcp`, with the command:
+The example uses `MCPServerStdio` from `agents.mcp` (see `main.py`; parallel types live under `cai.sdk.agents.mcp` in the framework), with the command:
 
 ```bash
 uvx mcp-server-git
@@ -21,6 +21,6 @@ Prior to running the agent, the user is prompted to provide a local directory pa
 Under the hood:
 
 1. The server is spun up in a subprocess, and exposes a bunch of tools like `git_log()`
-2. We add the server instance to the Agent via `mcp_agents`.
-3. Each time the agent runs, we call out to the MCP server to fetch the list of tools via `server.list_tools()`. The result is cached.
-4. If the LLM chooses to use an MCP tool, we call the MCP server to run the tool via `server.run_tool()`.
+2. We add the server instance to the Agent via `mcp_servers=[...]`.
+3. Each time the agent runs, we call out to the MCP server to fetch the list of tools via `server.list_tools()`. The result can be cached when configured.
+4. If the LLM chooses to use an MCP tool, the runtime calls the server via `server.call_tool()`.

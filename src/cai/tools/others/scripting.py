@@ -10,9 +10,9 @@ from cai.sdk.agents import function_tool
 
 @function_tool
 def scripting_tool(
-        command: str = "",
-        args: str = "",
-        ctf=None  # pylint: disable=unused-argument
+    command: str = "",
+    args: str = "",
+    ctf=None,  # pylint: disable=unused-argument
 ) -> str:
     """Scripting tool for executing Python code directly in memory.
     IMPORTANT: Use with caution - executes Python code directly.
@@ -46,9 +46,9 @@ def scripting_tool(
 
     markdown_patterns = [
         r"^```python\n(.*?)\n```",  # Standard markdown
-        r"^```python(.+?)```",      # No newlines
-        r"^```\n(.*?)\n```",        # No language specified
-        r"^`{1,3}(.*?)`{1,3}"      # Single or triple backticks
+        r"^```python(.+?)```",  # No newlines
+        r"^```\n(.*?)\n```",  # No language specified
+        r"^`{1,3}(.*?)`{1,3}",  # Single or triple backticks
     ]
     script = command
     for pattern in markdown_patterns:
@@ -64,12 +64,12 @@ def scripting_tool(
     try:
         tree = ast.parse(script)
         for node in ast.walk(tree):
-            if isinstance(node, (ast.Import, ast.ImportFrom)
-                          ):  # Check for potentially dangerous operations
-                module = node.names[0].name.split('.')[0]
-                if module in ['os', 'sys', 'subprocess', 'shutil']:
-                    raise SecurityError(
-                        f"Importing potentially dangerous module: {module}")
+            if isinstance(
+                node, (ast.Import, ast.ImportFrom)
+            ):  # Check for potentially dangerous operations
+                module = node.names[0].name.split(".")[0]
+                if module in ["os", "sys", "subprocess", "shutil"]:
+                    raise SecurityError(f"Importing potentially dangerous module: {module}")
     except SyntaxError as e:
         return f"Python syntax error: {str(e)}"
     except SecurityError as e:
@@ -83,24 +83,56 @@ def scripting_tool(
     try:
         local_vars = {}
         if args:
-            local_vars['args'] = args
+            local_vars["args"] = args
 
         # Create a restricted environment for execution
         safe_builtins = {
-            'abs': abs, 'all': all, 'any': any, 'ascii': ascii,
-            'bin': bin, 'bool': bool, 'bytearray': bytearray,
-            'bytes': bytes, 'chr': chr, 'complex': complex,
-            'dict': dict, 'divmod': divmod, 'enumerate': enumerate,
-            'filter': filter, 'float': float, 'format': format,
-            'frozenset': frozenset, 'hash': hash, 'hex': hex,
-            'int': int, 'isinstance': isinstance, 'issubclass': issubclass,
-            'iter': iter, 'len': len, 'list': list, 'map': map,
-            'max': max, 'min': min, 'next': next, 'object': object,
-            'oct': oct, 'ord': ord, 'pow': pow, 'print': print,
-            'range': range, 'repr': repr, 'reversed': reversed,
-            'round': round, 'set': set, 'slice': slice, 'sorted': sorted,
-            'str': str, 'sum': sum, 'tuple': tuple, 'type': type,
-            'zip': zip
+            "abs": abs,
+            "all": all,
+            "any": any,
+            "ascii": ascii,
+            "bin": bin,
+            "bool": bool,
+            "bytearray": bytearray,
+            "bytes": bytes,
+            "chr": chr,
+            "complex": complex,
+            "dict": dict,
+            "divmod": divmod,
+            "enumerate": enumerate,
+            "filter": filter,
+            "float": float,
+            "format": format,
+            "frozenset": frozenset,
+            "hash": hash,
+            "hex": hex,
+            "int": int,
+            "isinstance": isinstance,
+            "issubclass": issubclass,
+            "iter": iter,
+            "len": len,
+            "list": list,
+            "map": map,
+            "max": max,
+            "min": min,
+            "next": next,
+            "object": object,
+            "oct": oct,
+            "ord": ord,
+            "pow": pow,
+            "print": print,
+            "range": range,
+            "repr": repr,
+            "reversed": reversed,
+            "round": round,
+            "set": set,
+            "slice": slice,
+            "sorted": sorted,
+            "str": str,
+            "sum": sum,
+            "tuple": tuple,
+            "type": type,
+            "zip": zip,
         }
 
         # Parse the script to check for potentially dangerous operations
@@ -109,11 +141,11 @@ def scripting_tool(
             # Add additional security checks here if needed
 
             # Execute in a restricted environment
-            restricted_globals = {'__builtins__': safe_builtins}
+            restricted_globals = {"__builtins__": safe_builtins}
             restricted_globals.update(local_vars)
 
             # Use compile and eval instead of exec for better control
-            compiled_code = compile(parsed, '<string>', 'exec')
+            compiled_code = compile(parsed, "<string>", "exec")
             # pylint: disable=eval-used
             eval(compiled_code, restricted_globals)  # nosec B307
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -130,3 +162,8 @@ def scripting_tool(
 
 class SecurityError(Exception):  # pylint: disable=missing-class-docstring
     pass
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("scripting_tool", scripting_tool, categories=["misc"])

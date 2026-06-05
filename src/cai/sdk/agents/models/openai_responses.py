@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload, Dict
 
 from openai import NOT_GIVEN, APIStatusError, AsyncOpenAI, AsyncStream, NotGiven
 from openai.types import ChatModel
@@ -27,6 +27,8 @@ from ..tool import ComputerTool, FileSearchTool, FunctionTool, Tool, WebSearchTo
 from ..tracing import SpanError, response_span
 from ..usage import Usage
 from ..version import __version__
+from cai.util.wait_hints import ModelStreamWaitHints, model_wait_hints
+from cai.util.llm_api_base import resolve_llm_openai_compatible_api_key
 from .interface import Model, ModelTracing
 
 if TYPE_CHECKING:
@@ -57,14 +59,14 @@ class OpenAIResponsesModel(Model):
         print(f"\nDEBUG: OpenAIResponsesModel initialized with model: {model}\n")
         self.model = model
         self._client = openai_client
-        
+
         # Track interaction counter and token totals for cli display
         self.interaction_counter = 0
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_reasoning_tokens = 0
         self.agent_name = "Agent"  # Default name
-        
+
     def set_agent_name(self, name: str) -> None:
         """Set the agent name for CLI display purposes."""
         self.agent_name = name
@@ -84,18 +86,54 @@ class OpenAIResponsesModel(Model):
     ) -> ModelResponse:
         # Increment the interaction counter for CLI display
         self.interaction_counter += 1
-        
+
+        # --- Snapshot inputs for token accounting parity with IN: ---
+        sys_tokens = 0
+        tool_defs_tokens = 0
+        try:
+            # Count system tokens dynamically
+            if system_instructions:
+                try:
+                    from cai.sdk.agents.models.openai_chatcompletions import count_tokens_with_tiktoken as _ct
+                    sys_tokens, _ = _ct(str(system_instructions))
+                except Exception:
+                    sys_tokens = len(str(system_instructions)) // 4
+            # Count tool definition tokens from params_json_schema
+            if tools:
+                try:
+                    import json as _json
+                    import tiktoken as _t
+                    try:
+                        enc = _t.get_encoding("cl100k_base")
+                    except Exception:
+                        enc = _t.get_encoding("gpt2")
+                    for tool in tools:
+                        schema = getattr(tool, "params_json_schema", None)
+                        if schema:
+                            as_str = _json.dumps(schema)
+                            tool_defs_tokens += len(enc.encode(as_str)) if enc else len(as_str) // 4
+                except Exception:
+                    pass
+            self._last_request_breakdown = {
+                "system_tokens": int(sys_tokens or 0),
+                "tool_definitions_tokens": int(tool_defs_tokens or 0),
+                "messages_breakdown": {"user": 0, "assistant": 0, "tool_calls": 0, "tool_results": 0},
+            }
+        except Exception:
+            self._last_request_breakdown = None
+
         with response_span(disabled=tracing.is_disabled()) as span_response:
             try:
-                response = await self._fetch_response(
-                    system_instructions,
-                    input,
-                    model_settings,
-                    tools,
-                    output_schema,
-                    handoffs,
-                    stream=False,
-                )
+                async with model_wait_hints():
+                    response = await self._fetch_response(
+                        system_instructions,
+                        input,
+                        model_settings,
+                        tools,
+                        output_schema,
+                        handoffs,
+                        stream=False,
+                    )
 
                 if _debug.DONT_LOG_MODEL_DATA:
                     logger.debug("LLM responded")
@@ -119,50 +157,74 @@ class OpenAIResponsesModel(Model):
                 if tracing.include_data():
                     span_response.span_data.response = response
                     span_response.span_data.input = input
-                    
+
                 # Print the agent message for CLI display
                 from cai.util import cli_print_agent_messages
+
                 try:
                     # Create a message-like object to display
-                    message_obj = type('ResponseWrapper', (), {
-                        'content': '\n'.join([
-                            str(item.get('content', '')) if hasattr(item, 'get') 
-                            else str(getattr(item, 'text', '')) 
-                            for item in response.output 
-                            if hasattr(item, 'get') or hasattr(item, 'text')
-                        ]),
-                        'tool_calls': [
-                            type('ToolCallWrapper', (), {
-                                'name': item.name,
-                                'arguments': item.arguments
-                            }) 
-                            for item in response.output 
-                            if hasattr(item, 'name') and hasattr(item, 'arguments')
-                        ]
-                    })
-                    
+                    message_obj = type(
+                        "ResponseWrapper",
+                        (),
+                        {
+                            "content": "\n".join(
+                                [
+                                    str(item.get("content", ""))
+                                    if hasattr(item, "get")
+                                    else str(getattr(item, "text", ""))
+                                    for item in response.output
+                                    if hasattr(item, "get") or hasattr(item, "text")
+                                ]
+                            ),
+                            "tool_calls": [
+                                type(
+                                    "ToolCallWrapper",
+                                    (),
+                                    {"name": item.name, "arguments": item.arguments},
+                                )
+                                for item in response.output
+                                if hasattr(item, "name") and hasattr(item, "arguments")
+                            ],
+                        },
+                    )
+
                     cli_print_agent_messages(
-                        agent_name=getattr(self, 'agent_name', 'Agent'),
+                        agent_name=getattr(self, "agent_name", "Agent"),
                         message=message_obj,
-                        counter=getattr(self, 'interaction_counter', 0),
+                        counter=getattr(self, "interaction_counter", 0),
                         model=str(self.model),
                         debug=False,
                         interaction_input_tokens=usage.input_tokens,
                         interaction_output_tokens=usage.output_tokens,
-                        interaction_reasoning_tokens=0,  # Not available in Responses API
-                        total_input_tokens=getattr(self, 'total_input_tokens', 0),
-                        total_output_tokens=getattr(self, 'total_output_tokens', 0),
-                        total_reasoning_tokens=getattr(self, 'total_reasoning_tokens', 0),
+                        interaction_reasoning_tokens=0,
+                        total_input_tokens=getattr(self, "total_input_tokens", 0),
+                        total_output_tokens=getattr(self, "total_output_tokens", 0),
+                        total_reasoning_tokens=getattr(self, "total_reasoning_tokens", 0),
                         interaction_cost=None,
                         total_cost=None,
                     )
-                    
+
                     # Update token totals
                     self.total_input_tokens += usage.input_tokens
                     self.total_output_tokens += usage.output_tokens
+
+                    # Store actual tokens to align usage metrics with IN:
+                    try:
+                        self._last_request_actual_input_tokens = int(usage.input_tokens or 0)
+                        # Compute overhead to reconcile totals
+                        br = self._last_request_breakdown or {}
+                        sys_t = int(br.get("system_tokens", 0) or 0)
+                        tool_t = int(br.get("tool_definitions_tokens", 0) or 0)
+                        msg_map = br.get("messages_breakdown", {}) or {}
+                        msg_sum = sum(int(v or 0) for v in msg_map.values())
+                        known = sys_t + tool_t + msg_sum
+                        overhead = int(self._last_request_actual_input_tokens) - known
+                        self._last_request_breakdown_overhead = int(overhead) if overhead > 0 else 0
+                    except Exception:
+                        self._last_request_breakdown_overhead = 0
                 except Exception as e:
                     logger.error(f"Error printing agent message: {e}")
-                
+
             except Exception as e:
                 span_response.set_error(
                     SpanError(
@@ -197,8 +259,10 @@ class OpenAIResponsesModel(Model):
         """
         # Increment the interaction counter for CLI display
         self.interaction_counter += 1
-        
+
         with response_span(disabled=tracing.is_disabled()) as span_response:
+            stream_wait_hints = ModelStreamWaitHints()
+            await stream_wait_hints.start()
             try:
                 stream = await self._fetch_response(
                     system_instructions,
@@ -213,6 +277,7 @@ class OpenAIResponsesModel(Model):
                 final_response: Response | None = None
 
                 async for chunk in stream:
+                    await stream_wait_hints.stop()
                     if isinstance(chunk, ResponseCompletedEvent):
                         final_response = chunk.response
                     yield chunk
@@ -223,47 +288,70 @@ class OpenAIResponsesModel(Model):
 
                 # Print the agent message for CLI display
                 from cai.util import cli_print_agent_messages
+
                 try:
                     # Create a message-like object to display
-                    message_obj = type('ResponseWrapper', (), {
-                        'content': '\n'.join([
-                            str(item.get('content', '')) if hasattr(item, 'get') 
-                            else str(getattr(item, 'text', '')) 
-                            for item in final_response.output 
-                            if hasattr(item, 'get') or hasattr(item, 'text')
-                        ]),
-                        'tool_calls': [
-                            type('ToolCallWrapper', (), {
-                                'name': item.name,
-                                'arguments': item.arguments
-                            }) 
-                            for item in final_response.output 
-                            if hasattr(item, 'name') and hasattr(item, 'arguments')
-                        ]
-                    })
-                    
+                    message_obj = type(
+                        "ResponseWrapper",
+                        (),
+                        {
+                            "content": "\n".join(
+                                [
+                                    str(item.get("content", ""))
+                                    if hasattr(item, "get")
+                                    else str(getattr(item, "text", ""))
+                                    for item in final_response.output
+                                    if hasattr(item, "get") or hasattr(item, "text")
+                                ]
+                            ),
+                            "tool_calls": [
+                                type(
+                                    "ToolCallWrapper",
+                                    (),
+                                    {"name": item.name, "arguments": item.arguments},
+                                )
+                                for item in final_response.output
+                                if hasattr(item, "name") and hasattr(item, "arguments")
+                            ],
+                        },
+                    )
+
                     cli_print_agent_messages(
-                        agent_name=getattr(self, 'agent_name', 'Agent'),
+                        agent_name=getattr(self, "agent_name", "Agent"),
                         message=message_obj,
-                        counter=getattr(self, 'interaction_counter', 0),
+                        counter=getattr(self, "interaction_counter", 0),
                         model=str(self.model),
                         debug=False,
                         interaction_input_tokens=final_response.usage.input_tokens,
                         interaction_output_tokens=final_response.usage.output_tokens,
-                        interaction_reasoning_tokens=0,  # Not available in Responses API
-                        total_input_tokens=getattr(self, 'total_input_tokens', 0),
-                        total_output_tokens=getattr(self, 'total_output_tokens', 0),
-                        total_reasoning_tokens=getattr(self, 'total_reasoning_tokens', 0),
+                        interaction_reasoning_tokens=0,
+                        total_input_tokens=getattr(self, "total_input_tokens", 0),
+                        total_output_tokens=getattr(self, "total_output_tokens", 0),
+                        total_reasoning_tokens=getattr(self, "total_reasoning_tokens", 0),
                         interaction_cost=None,
                         total_cost=None,
                     )
-                    
+
                     # Update token totals
                     self.total_input_tokens += final_response.usage.input_tokens
                     self.total_output_tokens += final_response.usage.output_tokens
+
+                    # Store actual tokens to align usage metrics with IN: for streamed path
+                    try:
+                        self._last_request_actual_input_tokens = int(final_response.usage.input_tokens or 0)
+                        br = self._last_request_breakdown or {}
+                        sys_t = int(br.get("system_tokens", 0) or 0)
+                        tool_t = int(br.get("tool_definitions_tokens", 0) or 0)
+                        msg_map = br.get("messages_breakdown", {}) or {}
+                        msg_sum = sum(int(v or 0) for v in msg_map.values())
+                        known = sys_t + tool_t + msg_sum
+                        overhead = int(self._last_request_actual_input_tokens) - known
+                        self._last_request_breakdown_overhead = int(overhead) if overhead > 0 else 0
+                    except Exception:
+                        self._last_request_breakdown_overhead = 0
                 except Exception as e:
                     logger.error(f"Error printing agent message: {e}")
-                
+
             except Exception as e:
                 span_response.set_error(
                     SpanError(
@@ -275,6 +363,11 @@ class OpenAIResponsesModel(Model):
                 )
                 logger.error(f"Error streaming response: {e}")
                 raise
+            finally:
+                try:
+                    await stream_wait_hints.stop()
+                except Exception:
+                    pass
 
     @overload
     async def _fetch_response(
@@ -356,8 +449,13 @@ class OpenAIResponsesModel(Model):
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
-            # Determine API key
-            api_key = os.getenv("ALIAS_API_KEY", os.getenv("OPENAI_API_KEY", "sk-alias-1234567890"))
+            api_key = resolve_llm_openai_compatible_api_key(str(self.model))
+            if not api_key:
+                raise UserError(
+                    "Missing API key for selected model. "
+                    "For alias-family models (alias*/cai*/csi*), set ALIAS_API_KEY. "
+                    "For OpenAI models, set OPENAI_API_KEY."
+                )
             self._client = AsyncOpenAI(api_key=api_key)
         return self._client
 

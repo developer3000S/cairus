@@ -124,6 +124,36 @@ async def test_plaintext_agent_with_tool_call_is_run_again():
 
 
 @pytest.mark.asyncio
+async def test_missing_tool_call_triggers_run_again_with_prompt():
+    # Agent has only 'test' tool, model attempts to call 'missing'
+    agent = Agent(name="test", tools=[get_function_tool(name="test", return_value="123")])
+    response = ModelResponse(
+        output=[get_function_tool_call("missing", "")],
+        usage=Usage(),
+        referenceable_id=None,
+    )
+
+    result = await get_execute_result(agent, response)
+
+    # Should run again so the LLM can react to the synthetic prompt output
+    assert isinstance(result.next_step, NextStepRunAgain)
+
+    # Generated items should include the call and a synthetic tool output prompt
+    from cai.sdk.agents import ToolCallItem, ToolCallOutputItem
+
+    assert any(
+        isinstance(item, ToolCallItem) and getattr(item.raw_item, "name", None) == "missing"
+        for item in result.generated_items
+    )
+    assert any(
+        isinstance(item, ToolCallOutputItem)
+        and "Available tools:" in str(item.output)
+        and "Choose the best alternative tool" in str(item.output)
+        for item in result.generated_items
+    )
+
+
+@pytest.mark.asyncio
 async def test_multiple_tool_calls():
     agent = Agent(
         name="test",

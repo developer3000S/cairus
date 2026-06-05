@@ -186,6 +186,9 @@ class ItemHelpers:
         if not isinstance(message, ResponseOutputMessage):
             return ""
 
+        if not message.content:
+            return ""
+
         last_content = message.content[-1]
         if isinstance(last_content, ResponseOutputText):
             return last_content.text
@@ -198,6 +201,8 @@ class ItemHelpers:
     def extract_last_text(cls, message: TResponseOutputItem) -> str | None:
         """Extracts the last text content from a message, if any. Ignores refusals."""
         if isinstance(message, ResponseOutputMessage):
+            if not message.content:
+                return None
             last_content = message.content[-1]
             if isinstance(last_content, ResponseOutputText):
                 return last_content.text

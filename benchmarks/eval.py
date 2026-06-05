@@ -80,7 +80,13 @@ from annotation_metrics import (
 )
 
 
-dotenv.load_dotenv()
+# Load .env from current directory only, not from parent directories
+dotenv_path = os.path.join(os.getcwd(), '.env')
+dotenv.load_dotenv(dotenv_path=dotenv_path, verbose=False)
+
+# Set default for OPENAI_API_KEY if not already set
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = ""
 
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 model_pricing_cache = {}

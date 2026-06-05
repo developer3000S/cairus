@@ -2,11 +2,13 @@
 """
 Netstat tool
 """
-from cai.tools.common import run_command   # pylint: disable=import-error
+
+from cai.tools.common import run_command  # pylint: disable=import-error
 from cai.sdk.agents import function_tool
 
+
 @function_tool
-def netstat(args: str = '', ctf=None) -> str:
+def netstat(args: str = "", ctf=None) -> str:
     """
     netstat tool to list all listening ports and their associated programs.
     Args:
@@ -14,5 +16,10 @@ def netstat(args: str = '', ctf=None) -> str:
     Returns:
         str: The output of running the netstat command
     """
-    command = f'netstat -tuln {args}'
+    command = f"netstat -tuln {args}"
     return run_command(command, ctf=ctf)
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("netstat", netstat, categories=["recon", "network"])

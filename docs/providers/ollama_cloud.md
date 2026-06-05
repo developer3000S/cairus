@@ -25,7 +25,7 @@ cai
 
 ## Available Models
 
-View in CAI with `/model show` under "Ollama Cloud" category:
+View in CAI with `/model show` (predefined list includes Ollama Cloud models):
 
 - `ollama_cloud/gpt-oss:120b` - General purpose 120B model
 - `ollama_cloud/llama3.3:70b` - Llama 3.3 70B

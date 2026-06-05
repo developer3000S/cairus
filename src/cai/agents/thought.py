@@ -5,26 +5,28 @@ using reasoner as a tool call
 
 support meta agent may better @cai.sdk.agents.meta.reasoner_support
 """
+
 from cai.tools.misc.reasoning import think
 from cai.sdk.agents import Agent, OpenAIChatCompletionsModel  # pylint: disable=import-error
 from openai import AsyncOpenAI
 from cai.util import load_prompt_template, create_system_prompt_renderer
-import os
+from cai.config import get_config
 
-# Determine API key
-api_key = os.getenv("ALIAS_API_KEY", os.getenv("OPENAI_API_KEY", "sk-alias-1234567890"))
-
+_cfg = get_config()
 thought_agent_system_prompt = load_prompt_template("prompts/system_thought_router.md")
 
 # Thought Process Agent for analysis and planning
 thought_agent = Agent(
     name="ThoughtAgent",
     model=OpenAIChatCompletionsModel(
-        model=os.getenv('CAI_MODEL', "alias1"),
-        openai_client=AsyncOpenAI(api_key=api_key),
+        model=_cfg.model,
+        openai_client=AsyncOpenAI(),
     ),
     description="""Agent focused on analyzing and planning the next steps
                    in a security assessment or CTF challenge.""",
-    instructions=create_system_prompt_renderer(thought_agent_system_prompt),
+    instructions=create_system_prompt_renderer(
+        thought_agent_system_prompt,
+        cyber_micro_profile_key="thought_router",
+    ),
     tools=[think],
 )

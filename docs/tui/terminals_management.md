@@ -339,8 +339,8 @@ When you select a team:
 To create custom team configurations:
 
 1. Manually configure each terminal with desired agents
-2. Save the session: `/save my_custom_team.json`
-3. Load it later: `/load my_custom_team.json`
+2. Save the session: `/save my_custom_team.jsonl` (or `/save summary.md` for a readable Markdown export)
+3. Load it later with `/load my_custom_team.jsonl` (JSONL only; `.md` is not for `/load`)
 
 ---
 
@@ -584,7 +584,7 @@ Leverage the 11 built-in teams instead of manual configuration.
 
 Save sessions with descriptive names:
 ```bash
-/save 2025-10-27_webapp_pentest_team3.json
+/save 2025-10-27_webapp_pentest_team3.jsonl
 ```
 
 ### 4. Monitor Costs Per Terminal

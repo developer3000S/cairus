@@ -30,6 +30,7 @@ class TestAgentCommand:
         # Clear any agent-related environment variables
         env_vars_to_clear = [
             "CAI_AGENT_TYPE",
+            "CAI_AGENT_ROUTE_MODE",
             "CTF_MODEL",
             "CAI_CODE_MODEL",
             "CAI_TEST_MODEL",
@@ -57,7 +58,14 @@ class TestAgentCommand:
         agents = {}
 
         # Create mock agent objects with required attributes
-        for name in ["blueteam_agent", "test", "custom", "basic"]:
+        for name in [
+            "blueteam_agent",
+            "selection_agent",
+            "orchestration_agent",
+            "test",
+            "custom",
+            "basic",
+        ]:
             mock_agent = Mock()
             mock_agent.name = name
             mock_agent.model = f"model-for-{name}"
@@ -67,7 +75,7 @@ class TestAgentCommand:
             # Configure properties that need len() to work
             mock_agent.functions = []  # Empty list instead of Mock
             mock_agent.handoffs = []  # Empty list instead of Mock
-            
+
             # Explicitly set _pattern to None to avoid mock pattern issues
             mock_agent._pattern = None
             mock_agent.tools = []  # Empty list instead of Mock
@@ -80,6 +88,7 @@ class TestAgentCommand:
             mock_agent.handoff_description = None
             mock_agent.output_type = None
             mock_agent._pattern = None  # Avoid mock pattern issues
+            mock_agent.model_settings = None  # Avoid Mock being used as top_p value
 
             agents[name] = mock_agent
 
@@ -91,8 +100,8 @@ class TestAgentCommand:
         assert agent_command.description == "Manage and switch between agents"
         assert agent_command.aliases == ["/a"]
 
-        # Check subcommands are available
-        expected_subcommands = ["list", "select", "info", "multi", "current"]
+        # Check subcommands are available (includes 'new' for interactive creator)
+        expected_subcommands = ["list", "select", "info", "current", "new"]
         assert set(agent_command.get_subcommands()) == set(expected_subcommands)
 
     def test_get_model_display_code_agent(self, agent_command):
@@ -165,9 +174,53 @@ class TestAgentCommand:
         result = agent_command.handle_select(["blueteam_agent"])
         assert result is True
         assert os.environ.get("CAI_AGENT_TYPE") == "blueteam_agent"
+        assert os.environ.get("CAI_AGENT_ROUTE_MODE") == "pinned"
 
         # Verify visualization was called
         mock_visualize.assert_called_once_with(mock_agents["blueteam_agent"])
+
+    @patch("cai.repl.commands.agent.get_available_agents")
+    @patch("cai.repl.commands.agent.visualize_agent_graph")
+    def test_handle_select_selection_agent_sets_auto_route_mode(
+        self, mock_visualize, mock_get_agents, agent_command, mock_agents
+    ):
+        """Selecting selection_agent enables auto handoff routing."""
+        mock_get_agents.return_value = mock_agents
+
+        result = agent_command.handle_select(["selection_agent"])
+        assert result is True
+        assert os.environ.get("CAI_AGENT_TYPE") == "selection_agent"
+        assert os.environ.get("CAI_AGENT_ROUTE_MODE") == "auto"
+        mock_visualize.assert_called_once_with(mock_agents["selection_agent"])
+
+    @patch("cai.repl.commands.agent.get_available_agents")
+    @patch("cai.repl.commands.agent.visualize_agent_graph")
+    def test_handle_select_orchestration_agent_sets_auto_route_mode(
+        self, mock_visualize, mock_get_agents, agent_command, mock_agents
+    ):
+        """Selecting orchestration_agent enables auto handoff routing."""
+        mock_get_agents.return_value = mock_agents
+
+        result = agent_command.handle_select(["orchestration_agent"])
+        assert result is True
+        assert os.environ.get("CAI_AGENT_TYPE") == "orchestration_agent"
+        assert os.environ.get("CAI_AGENT_ROUTE_MODE") == "auto"
+        mock_visualize.assert_called_once_with(mock_agents["orchestration_agent"])
+
+    @patch("cai.repl.commands.agent.get_available_agents")
+    @patch("cai.repl.commands.agent.visualize_agent_graph")
+    def test_handle_select_orchestration_agent_shows_beta_notice(
+        self, mock_visualize, mock_get_agents, agent_command, mock_agents
+    ):
+        """Selecting orchestration_agent prints a BETA notice."""
+        mock_get_agents.return_value = mock_agents
+
+        with patch("cai.repl.commands.agent.console.print") as mock_print:
+            result = agent_command.handle_select(["orchestration_agent"])
+
+        assert result is True
+        printed = " ".join(str(call) for call in mock_print.call_args_list)
+        assert "BETA" in printed
 
     @patch("cai.repl.commands.agent.get_available_agents")
     @patch("cai.repl.commands.agent.visualize_agent_graph")
@@ -182,7 +235,7 @@ class TestAgentCommand:
             del os.environ["CAI_AGENT_TYPE"]
 
         result = agent_command.handle_select(["2"])
-        
+
         # The command may fail due to the locals() check in the source code
         # If it fails, that's actually the current behavior we're testing
         if result is False:
@@ -262,9 +315,28 @@ class TestAgentCommand:
         mock_get_agents.return_value = mock_agents
         os.environ["CAI_AGENT_TYPE"] = "blueteam_agent"
         os.environ["CAI_PARALLEL"] = "1"  # Ensure single agent mode
-        
+
         result = agent_command.handle_current([])
         assert result is True
+
+    @patch("cai.repl.commands.agent.get_available_agents")
+    def test_handle_current_defaults_to_selection_agent(
+        self, mock_get_agents, agent_command, mock_agents
+    ):
+        """Test handle_current defaults to selection_agent when CAI_AGENT_TYPE is unset."""
+        mock_get_agents.return_value = mock_agents
+        os.environ.pop("CAI_AGENT_TYPE", None)
+        os.environ["CAI_PARALLEL"] = "1"
+
+        with patch("cai.repl.commands.agent.console.print") as mock_print:
+            result = agent_command.handle_current([])
+
+        assert result is True
+        current_panel = mock_print.call_args_list[0].args[0]
+        current_panel_content = str(current_panel.renderable)
+        assert "Active Agent:" in current_panel_content
+        assert "selection_agent" in current_panel_content
+        assert "Agent Key:[/bold] selection_agent" in current_panel_content
 
     @patch("cai.repl.commands.agent.get_available_agents")
     def test_handle_current_agent_not_found(self, mock_get_agents, agent_command, mock_agents):
@@ -272,19 +344,19 @@ class TestAgentCommand:
         mock_get_agents.return_value = mock_agents
         os.environ["CAI_AGENT_TYPE"] = "nonexistent_agent"
         os.environ["CAI_PARALLEL"] = "1"
-        
+
         result = agent_command.handle_current([])
         assert result is False
 
     @patch("cai.repl.commands.agent.get_available_agents")
     def test_handle_current_parallel_mode(self, mock_get_agents, agent_command):
         """Test handle_current for parallel mode."""
-        from cai.repl.commands.parallel import ParallelConfig, PARALLEL_CONFIGS
-        
+        from cai.repl.commands.parallel import PARALLEL_CONFIGS, ParallelConfig
+
         # Save original configs
         original_configs = PARALLEL_CONFIGS[:]
         PARALLEL_CONFIGS.clear()
-        
+
         try:
             # Set up parallel configs
             config1 = ParallelConfig("agent1", "gpt-4")
@@ -292,35 +364,35 @@ class TestAgentCommand:
             config2 = ParallelConfig("agent2", "claude")
             config2.id = "P2"
             PARALLEL_CONFIGS.extend([config1, config2])
-            
+
             # Create mock agents with proper attributes
             agent1_mock = Mock()
             agent1_mock.name = "Agent One"
             agent1_mock.model = "default"
-            
+
             agent2_mock = Mock()
             agent2_mock.name = "Agent Two"
             agent2_mock.model = "default"
-            
+
             # Create pattern pseudo-agent with proper structure
             mock_pattern = Mock()
             mock_pattern.pattern_type = "parallel"
             mock_pattern.description = "Test Pattern"
             mock_pattern.configs = [config1, config2]  # Use actual list
-            
+
             mock_pattern_agent = Mock()
             mock_pattern_agent._pattern = mock_pattern
-            
+
             mock_agents = {
                 "agent1": agent1_mock,
                 "agent2": agent2_mock,
-                "test_pattern": mock_pattern_agent
+                "test_pattern": mock_pattern_agent,
             }
             mock_get_agents.return_value = mock_agents
-            
+
             # Set parallel mode
             os.environ["CAI_PARALLEL"] = "2"
-            
+
             result = agent_command.handle_current([])
             assert result is True
         finally:
@@ -407,6 +479,7 @@ class TestAgentCommand:
         mock_agent.parallel_tool_calls = False
         mock_agent.handoff_description = None
         mock_agent.output_type = None
+        mock_agent.model_settings = None  # Avoid Mock being used as top_p value
 
         mock_get_agents.return_value = {"callable": mock_agent}
 
@@ -432,6 +505,7 @@ class TestAgentCommand:
         mock_agent.parallel_tool_calls = False
         mock_agent.handoff_description = None
         mock_agent.output_type = None
+        mock_agent.model_settings = None  # Avoid Mock being used as top_p value
 
         mock_get_agents.return_value = {"multiline": mock_agent}
 
@@ -449,6 +523,7 @@ class TestAgentCommandIntegration:
         # Clear environment variables
         env_vars_to_clear = [
             "CAI_AGENT_TYPE",
+            "CAI_AGENT_ROUTE_MODE",
             "CTF_MODEL",
             "CAI_CODE_MODEL",
             "CAI_TEST_MODEL",
@@ -469,7 +544,9 @@ class TestAgentCommandIntegration:
     @patch("cai.repl.commands.agent.get_agent_module")
     @patch("cai.repl.commands.agent.visualize_agent_graph")
     @patch("cai.agents.get_agent_by_name")
-    def test_full_workflow(self, mock_get_agent_by_name, mock_visualize, mock_get_module, mock_get_agents):
+    def test_full_workflow(
+        self, mock_get_agent_by_name, mock_visualize, mock_get_module, mock_get_agents
+    ):
         """Test a complete workflow of listing, selecting, and getting info."""
         # Setup mock agents
         agents = {}
@@ -491,18 +568,19 @@ class TestAgentCommandIntegration:
             mock_agent.handoff_description = None
             mock_agent.output_type = None
             mock_agent._pattern = None  # Avoid mock pattern issues
+            mock_agent.model_settings = None  # Avoid Mock being used as top_p value
 
             agents[name] = mock_agent
 
         mock_get_agents.return_value = agents
         mock_get_module.return_value = "test_module"
-        
+
         # Configure get_agent_by_name to return the appropriate mock agent
         def get_agent_side_effect(name, agent_id=None):
             if name in agents:
                 return agents[name]
             raise ValueError(f"Invalid agent type: {name}")
-        
+
         mock_get_agent_by_name.side_effect = get_agent_side_effect
 
         cmd = AgentCommand()

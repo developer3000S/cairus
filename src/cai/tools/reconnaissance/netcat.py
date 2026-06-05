@@ -1,12 +1,13 @@
 """
- Here are the tools for netcat command
+Here are the tools for netcat command
 """
-from cai.tools.common import run_command   # pylint: disable=import-error
+
+from cai.tools.common import run_command  # pylint: disable=import-error
 from cai.sdk.agents import function_tool
 
+
 @function_tool
-def netcat(host: str, port: int, data: str = '',
-           args: str = '', ctf=None) -> str:
+def netcat(host: str, port: int, data: str = "", args: str = "", ctf=None) -> str:
     """
     A simple netcat tool to connect to a specified host and port.
     Args:
@@ -35,3 +36,8 @@ def netcat(host: str, port: int, data: str = '',
         return result
     except Exception as e:  # pylint: disable=broad-except
         return f"Error executing netcat command: {str(e)}"
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("netcat", netcat, categories=['recon', 'network'])

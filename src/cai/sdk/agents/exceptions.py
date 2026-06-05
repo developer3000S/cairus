@@ -65,5 +65,18 @@ class OutputGuardrailTripwireTriggered(AgentsException):
 
 class PriceLimitExceeded(AgentsException):
     """Raised when the maximum price limit is exceeded."""
+
     def __init__(self, current_cost: float, price_limit: float):
-        super().__init__(f"Maximum price limit (${price_limit:.4f}) exceeded. Current cost: ${current_cost:.4f}")
+        super().__init__(
+            f"Maximum price limit (${price_limit:.4f}) exceeded. Current cost: ${current_cost:.4f}"
+        )
+
+
+class UserCancelledCommand(AgentsException):
+    """Raised when the user cancels a sensitive command via the guard prompt."""
+
+    command: str
+
+    def __init__(self, command: str):
+        self.command = command
+        super().__init__(f"Command cancelled by user: {command}")

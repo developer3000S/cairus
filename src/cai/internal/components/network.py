@@ -1,9 +1,11 @@
 """
 Network utilities for system health monitoring
 """
+
 import socket
 import urllib.request
 from typing import Tuple
+
 
 def _validate_system_health() -> Tuple[bool, str]:
     """Check system connectivity status"""
@@ -17,7 +19,8 @@ def _validate_system_health() -> Tuple[bool, str]:
         except:
             return False, "offline"
 
+
 def process():
     """Process network health check"""
     status, mode = _validate_system_health()
-    return {"status": status, "mode": mode} 
+    return {"status": status, "mode": mode}

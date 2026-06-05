@@ -5,17 +5,38 @@ import asyncio
 import warnings
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
-from mcp import ClientSession, StdioServerParameters, Tool as MCPTool, stdio_client
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
 from mcp.types import CallToolResult, JSONRPCMessage
 from typing_extensions import NotRequired, TypedDict
+from .util import MCPUtil
+
+# Allow CAI to talk to newer MCP servers (like SwiftMCP using protocolVersion
+# "2025-06-18") without breaking compatibility with older ones. The upstream
+# `mcp` client currently only advertises/supports 1 and "2024-11-05", so we
+# extend its accepted versions at runtime instead of patching site-packages.
+try:  # pragma: no cover - defensive runtime patch
+    from mcp.client import session as _mcp_session
+
+    _supported = getattr(_mcp_session, "SUPPORTED_PROTOCOL_VERSIONS", ())
+    if "2025-06-18" not in _supported:
+        _mcp_session.SUPPORTED_PROTOCOL_VERSIONS = tuple(
+            list(_supported) + ["2025-06-18"]
+        )
+except Exception:
+    # If patching fails for any reason, fall back to the library defaults.
+    pass
 
 from ..exceptions import UserError
 from ..logger import logger
-import warnings
+
+if TYPE_CHECKING:
+    # Import Tool for typing only; location is stable across mcp versions.
+    from mcp.types import Tool as MCPTool
 
 
 class MCPServer(abc.ABC):
@@ -119,10 +140,12 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
                 # Only log connection errors at debug level
                 error_str = str(e).lower()
                 error_type = type(e).__name__
-                if ("connection" in error_str or 
-                    "refused" in error_str or 
-                    "taskgroup" in error_str or
-                    error_type == "ExceptionGroup"):
+                if (
+                    "connection" in error_str
+                    or "refused" in error_str
+                    or "taskgroup" in error_str
+                    or error_type == "ExceptionGroup"
+                ):
                     logger.debug(f"Expected connection error during MCP server init: {e}")
                 else:
                     logger.error(f"Error initializing MCP server: {e}")
@@ -167,8 +190,12 @@ class _MCPServerWithClientSession(MCPServer, abc.ABC):
             try:
                 # Suppress async generator warnings during cleanup
                 with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*asynchronous generator.*")
-                    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*was never awaited.*")
+                    warnings.filterwarnings(
+                        "ignore", category=RuntimeWarning, message=".*asynchronous generator.*"
+                    )
+                    warnings.filterwarnings(
+                        "ignore", category=RuntimeWarning, message=".*was never awaited.*"
+                    )
                     await self.exit_stack.aclose()
                     self.session = None
             except Exception as e:
@@ -236,13 +263,32 @@ class MCPServerStdio(_MCPServerWithClientSession):
         """
         super().__init__(cache_tools_list)
 
+        # Build environment more robustly (avoid stdio buffering for Python)
+        _env = dict(params.get("env", {}) or {})
+        try:
+            import os as _os
+            cmd_lower = str(params.get("command", "")).lower()
+            if "python" in cmd_lower and "PYTHONUNBUFFERED" not in _env:
+                _env["PYTHONUNBUFFERED"] = "1"
+            # Inherit locale if not provided to avoid encoding issues
+            if "LC_ALL" not in _env and "LC_ALL" in _os.environ:
+                _env["LC_ALL"] = _os.environ["LC_ALL"]
+            # Auto-provide MCP auth token to helper binaries like mcp-proxy
+            if "API_ACCESS_TOKEN" not in _env:
+                raw_token = MCPUtil._get_default_auth_token_raw()
+                if raw_token:
+                    _env["API_ACCESS_TOKEN"] = raw_token
+        except Exception:
+            pass
+
         self.params = StdioServerParameters(
             command=params["command"],
             args=params.get("args", []),
-            env=params.get("env"),
+            env=_env if _env else None,
             cwd=params.get("cwd"),
             encoding=params.get("encoding", "utf-8"),
-            encoding_error_handler=params.get("encoding_error_handler", "strict"),
+            # Be tolerant by default to avoid fatal decode errors
+            encoding_error_handler=params.get("encoding_error_handler", "replace"),
         )
 
         self._name = name or f"stdio: {self.params.command}"
@@ -311,7 +357,17 @@ class MCPServerSse(_MCPServerWithClientSession):
         """
         super().__init__(cache_tools_list)
 
-        self.params = params
+        # Ensure sensible defaults and SSE headers
+        _headers = MCPUtil.get_default_auth_headers(params.get("headers", {}))
+        # Request-side headers (server must still send correct response headers)
+        _headers.setdefault("Accept", "text/event-stream")
+        _headers.setdefault("Cache-Control", "no-cache")
+        _headers.setdefault("Connection", "keep-alive")
+
+        self.params = {
+            **params,
+            "headers": _headers,
+        }
         self._name = name or f"sse: {self.params['url']}"
 
     def create_streams(
@@ -334,12 +390,12 @@ class MCPServerSse(_MCPServerWithClientSession):
     def name(self) -> str:
         """A readable name for the server."""
         return self._name
-    
+
     async def cleanup(self):
         """Cleanup the SSE server with special handling for async generators."""
         import warnings
         import asyncio
-        
+
         async with self._cleanup_lock:
             try:
                 # For SSE servers, we need to handle cleanup more carefully
@@ -348,7 +404,7 @@ class MCPServerSse(_MCPServerWithClientSession):
                     warnings.filterwarnings("ignore", message=".*asynchronous generator.*")
                     warnings.filterwarnings("ignore", message=".*didn't stop after athrow.*")
                     warnings.filterwarnings("ignore", message=".*cancel scope.*")
-                    
+
                     # Try to close gracefully with a short timeout
                     try:
                         await asyncio.wait_for(self.exit_stack.aclose(), timeout=0.5)
@@ -358,12 +414,12 @@ class MCPServerSse(_MCPServerWithClientSession):
                     except Exception:
                         # Ignore other cleanup errors for SSE
                         pass
-                    
+
                     self.session = None
             except Exception:
                 # Silently ignore all cleanup errors for SSE
                 pass
-    
+
     async def cleanup(self):
         """Cleanup the SSE server with special handling for async generators."""
         async with self._cleanup_lock:
@@ -374,7 +430,7 @@ class MCPServerSse(_MCPServerWithClientSession):
                     warnings.filterwarnings("ignore", category=RuntimeWarning)
                     warnings.filterwarnings("ignore", message=".*asynchronous generator.*")
                     warnings.filterwarnings("ignore", message=".*was never awaited.*")
-                    
+
                     # Try a quick cleanup with a short timeout
                     try:
                         await asyncio.wait_for(self.exit_stack.aclose(), timeout=0.5)

@@ -253,27 +253,31 @@ Learn more about Teams and Parallel Execution in the full TUI documentation.
 
 ## Step 8: Saving Your Work
 
-To save your conversation for later:
+To save all agent histories:
+
+- **JSONL** (reload later with `/load`):
 
 ```
-/save my-assessment.json
+/save my-assessment.jsonl
 ```
 
-Or in Markdown format:
+- **Markdown** (readable report or handoff document; not for `/load`):
 
 ```
 /save my-assessment.md
 ```
 
-Files are saved in your current working directory.
+Files are written to the path you give (relative paths use the current working directory). This is separate from `/memory save`, which stores summarized memory under `.cai/memory`.
 
 ### Loading a Saved Session
 
+Use a **`.jsonl`** file from `/save` (or a compatible session log):
+
 ```
-/load my-assessment.json
+/load my-assessment.jsonl
 ```
 
-This restores the conversation history for the current terminal.
+This merges the saved messages into the session (see `/help load` for targeting a specific agent or parallel slot).
 
 ## Step 9: Monitoring Costs
 

@@ -1,82 +1,66 @@
 """
 Environment command for CAI REPL.
-This module provides commands for displaying environment variables.
+This module provides commands for displaying and configuring environment variables.
 """
-import os
-from typing import (
-    List,
-    Optional
-)
-from rich.console import Console  # pylint: disable=import-error
-from rich.table import Table  # pylint: disable=import-error
+
+from typing import List, Optional
 
 from cai.repl.commands.base import Command, register_command
-
-console = Console()
+from cai.repl.commands.env_catalog import (
+    handle_env_catalog_default,
+    handle_env_catalog_get,
+    handle_env_catalog_list,
+    handle_env_catalog_set,
+    print_bare_env_session_view,
+)
 
 
 class EnvCommand(Command):
-    """Command for displaying environment variables."""
+    """Command for displaying and configuring environment variables (REPL session)."""
 
     def __init__(self):
         """Initialize the env command."""
         super().__init__(
             name="/env",
-            description="Display environment variables and their values",
-            aliases=["/e"]
+            description="Display and configure environment variables",
+            aliases=["/e"],
+        )
+        self.add_subcommand(
+            "list",
+            "List all catalog environment variables and their values",
+            handle_env_catalog_list,
+        )
+        self.add_subcommand(
+            "get",
+            "Get a catalog variable by number or name",
+            handle_env_catalog_get,
+        )
+        self.add_subcommand(
+            "set",
+            "Set a catalog variable: /env set <#|NAME> <value...>",
+            handle_env_catalog_set,
+        )
+        self.add_subcommand(
+            "default",
+            "Restore all catalog variables to registered defaults",
+            handle_env_catalog_default,
         )
 
     def handle(self, args: Optional[List[str]] = None) -> bool:
-        """Handle the env command.
+        """Route: no args -> session CAI_/CTF_ in os.environ; else subcommands only."""
+        if not args:
+            return print_bare_env_session_view()
 
-        Args:
-            args: Optional list of command arguments
+        first_arg = args[0]
+        if first_arg in self.subcommands:
+            handler = self.subcommands[first_arg]["handler"]
+            return handler(args[1:] if len(args) > 1 else None)
 
-        Returns:
-            True if the command was handled successfully, False otherwise
-        """
-        return self.handle_env_command()
+        return self.handle_unknown_subcommand(first_arg)
 
-    def handle_env_command(self) -> bool:
-        """Display environment variables starting with CAI or CTF.
-
-        Returns:
-            bool: True if the command was executed successfully
-        """
-        # Get all environment variables
-        env_vars = {
-            k: v for k, v in os.environ.items() if k.startswith(
-                ('CAI_', 'CTF_'))}
-
-        if not env_vars:
-            console.print(
-                "[yellow]No CAI_ or CTF_ environment variables found[/yellow]")
-            return True
-
-        # Create a table to display the variables
-        table = Table(
-            title="Environment Variables",
-            show_header=True,
-            header_style="bold magenta")
-        table.add_column("Variable", style="cyan")
-        table.add_column("Value", style="green")
-
-        # Add rows to the table with masked values for sensitive data
-        for key, value in sorted(env_vars.items()):
-            # Mask sensitive values (API keys, tokens, etc.)
-            if any(sensitive in key.lower()
-                   for sensitive in ['key', 'token', 'secret', 'password']):
-                # Show first half of the value, mask the rest
-                half_length = len(value) // 2
-                masked_value = value[:half_length] + \
-                    '*' * (len(value) - half_length)
-                table.add_row(key, masked_value)
-            else:
-                table.add_row(key, value)
-
-        console.print(table)
-        return True
+    def handle_no_args(self) -> bool:
+        """Satisfy base contract if invoked without args via default handler."""
+        return print_bare_env_session_view()
 
 
-# Register the command
 register_command(EnvCommand())

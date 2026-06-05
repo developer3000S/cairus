@@ -283,6 +283,7 @@ Save frequently used code:
 **Send Options**
 - Enter to send
 - Shift+Enter for new line
+- Alt+Enter for new line (terminal fallback)
 - Send button confirmation
 - Draft auto-save
 

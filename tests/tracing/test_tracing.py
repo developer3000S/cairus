@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ from cai.sdk.agents.tracing import (
     trace,
 )
 from cai.sdk.agents.tracing.spans import SpanError
+from cai.sdk.agents._run_impl import TraceCtxManager
 
 from tests.testing_processor import (
     SPAN_PROCESSOR_TESTING,
@@ -401,3 +403,19 @@ async def test_noop_parent_is_noop_child():
     span_2.finish()
 
     assert span_2.export() is None
+
+
+def test_trace_ctx_manager_generator_exit_does_not_reset_foreign_context_token():
+    manager = TraceCtxManager(
+        workflow_name="test_workflow",
+        trace_id=None,
+        group_id=None,
+        metadata=None,
+        disabled=True,
+    )
+
+    enter_context = contextvars.Context()
+    enter_context.run(manager.__enter__)
+
+    exit_context = contextvars.Context()
+    exit_context.run(manager.__exit__, GeneratorExit, GeneratorExit(), None)
