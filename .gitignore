@@ -1,6 +1,8 @@
 # macOS Files
 .DS_Store
 cai_env/
+# DEMOs
+DEMO/
 # Agent Framework Files
 AGENTS.md
 CLAUDE.md
@@ -107,6 +109,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env*
+.env.backup*
 .venv
 env/
 venv/
@@ -159,6 +163,9 @@ workspaces/
 # benchmarks
 benchmarks/outputs
 
+#CTR offline output
+tools/cut_the_rope/ctr_cai/output
+
 # other
 nohup.out
 .aider*
@@ -169,7 +176,22 @@ pentestperf
 venv*
 
 .claude
+.cursor/
+ova_extract/
+# flows
+agents.yml*
+.env.backup
+
+# dataset
 data/
 
-# ignore dev files
-cai-*
+# app
+cai-app-ios/
+learn-claude-code
+gemini-cli
+
+# runtime artifacts (recon outputs, bench results, refusal traces)
+bench_results/
+network_scan/
+network_scan.*
+refusal_test_output.log

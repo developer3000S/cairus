@@ -37,7 +37,10 @@ model_name = os.getenv("CAI_MODEL", "alias1")
 app_logic_mapper = Agent(
     name="AppLogicMapper",
     description="Agent specializing in application analysis to understand the logic of operation and return a complete map of it.",
-    instructions=create_system_prompt_renderer(app_logic_mapper_system_prompt),
+    instructions=create_system_prompt_renderer(
+        app_logic_mapper_system_prompt,
+        cyber_micro_profile_key="android",
+    ),
     tools=tools,
     model=OpenAIChatCompletionsModel(
         model=model_name,
@@ -50,7 +53,10 @@ app_logic_mapper = Agent(
 android_sast = Agent(
     name="AndroidSAST",
     description="Agent specializing in static application security testing and vulnerability discovery for Android applications",
-    instructions=create_system_prompt_renderer(android_sast_system_prompt),
+    instructions=create_system_prompt_renderer(
+        android_sast_system_prompt,
+        cyber_micro_profile_key="android",
+    ),
     tools=[
         app_logic_mapper.as_tool(
             tool_name="app_mapper",

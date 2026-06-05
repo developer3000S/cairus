@@ -6,6 +6,7 @@ control and interact with remote shells.
 It handles starting/stopping listeners,
 sending commands, and managing shell sessions.
 """
+
 import socket
 import sys
 import threading
@@ -25,7 +26,7 @@ class ReverseShellClient:
     - Monitor shell status
     """
 
-    def __init__(self, host='127.0.0.1', port=4444):
+    def __init__(self, host="127.0.0.1", port=4444):
         """
         Initialize reverse shell client
         Args:
@@ -48,6 +49,7 @@ class ReverseShellClient:
             client_socket: Connected client socket
         """
         self.client_socket = client_socket
+        client_socket.settimeout(30.0)
         while True:
             try:
                 data = client_socket.recv(4096)
@@ -57,6 +59,8 @@ class ReverseShellClient:
                 self.command_history.append(decoded_data)
                 sys.stdout.write(decoded_data)
                 sys.stdout.flush()
+            except socket.timeout:
+                continue
             except (OSError, UnicodeDecodeError):
                 break
         client_socket.close()
@@ -68,12 +72,13 @@ class ReverseShellClient:
         try:
             self.socket.bind((self.host, self.port))
             self.socket.listen(1)
+            self.socket.settimeout(30.0)
             while self.running:
-                client_socket, _ = self.socket.accept()
-                client_handler = threading.Thread(
-                    target=self.handle_client,
-                    args=(client_socket,)
-                )
+                try:
+                    client_socket, _ = self.socket.accept()
+                except socket.timeout:
+                    continue
+                client_handler = threading.Thread(target=self.handle_client, args=(client_socket,))
                 client_handler.daemon = True
                 client_handler.start()
         except OSError as e:
@@ -92,7 +97,7 @@ class ReverseShellClient:
         self.listener_thread.daemon = True
         self.listener_thread.start()
         self.socket.close()
-        return f'Listener started on {self.host}:{self.port}'
+        return f"Listener started on {self.host}:{self.port}"
 
     def stop(self):
         """
@@ -143,5 +148,10 @@ class ReverseShellClient:
             "history": self.command_history,
             "host": self.host,
             "port": self.port,
-            "status": connected
+            "status": connected,
         }
+
+
+# NOTE: C2 tools are instance methods on SimpleC2Server (stateful).
+# They cannot be registered as standalone functions in TOOL_REGISTRY.
+# Registration must happen at instantiation time by the agent that uses them.

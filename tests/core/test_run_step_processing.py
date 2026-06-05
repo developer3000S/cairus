@@ -94,7 +94,7 @@ async def test_single_tool_call():
 
 
 @pytest.mark.asyncio
-async def test_missing_tool_call_raises_error():
+async def test_missing_tool_call_returns_synthetic_output():
     agent = Agent(name="test", tools=[get_function_tool(name="test")])
     response = ModelResponse(
         output=[
@@ -105,14 +105,32 @@ async def test_missing_tool_call_raises_error():
         referenceable_id=None,
     )
 
-    with pytest.raises(ModelBehaviorError):
-        RunImpl.process_model_response(
-            agent=agent,
-            response=response,
-            output_schema=None,
-            handoffs=[],
-            all_tools=await agent.get_all_tools(),
-        )
+    result = RunImpl.process_model_response(
+        agent=agent,
+        response=response,
+        output_schema=None,
+        handoffs=[],
+        all_tools=await agent.get_all_tools(),
+    )
+
+    # Should not schedule any function executions for a missing tool
+    assert result.functions == []
+
+    # Should include both the tool call and a synthetic tool output describing the error
+    from cai.sdk.agents import ToolCallItem, ToolCallOutputItem
+
+    assert any(
+        isinstance(item, ToolCallItem)
+        and getattr(item.raw_item, "name", None) == "missing"
+        for item in result.new_items
+    )
+    assert any(
+        isinstance(item, ToolCallOutputItem)
+        and "Available tools:" in str(item.output)
+        and "Choose the best alternative tool" in str(item.output)
+        and "test" in str(item.output)
+        for item in result.new_items
+    )
 
 
 @pytest.mark.asyncio
@@ -198,7 +216,7 @@ async def test_handoffs_parsed_correctly():
 
 
 @pytest.mark.asyncio
-async def test_missing_handoff_fails():
+async def test_missing_handoff_returns_synthetic_output():
     agent_1 = Agent(name="test_1")
     agent_2 = Agent(name="test_2")
     agent_3 = Agent(name="test_3", handoffs=[agent_1])
@@ -207,14 +225,31 @@ async def test_missing_handoff_fails():
         usage=Usage(),
         referenceable_id=None,
     )
-    with pytest.raises(ModelBehaviorError):
-        RunImpl.process_model_response(
-            agent=agent_3,
-            response=response,
-            output_schema=None,
-            handoffs=Runner._get_handoffs(agent_3),
-            all_tools=await agent_3.get_all_tools(),
-        )
+    result = RunImpl.process_model_response(
+        agent=agent_3,
+        response=response,
+        output_schema=None,
+        handoffs=Runner._get_handoffs(agent_3),
+        all_tools=await agent_3.get_all_tools(),
+    )
+
+    # No scheduled handoffs since the requested handoff isn't configured
+    assert len(result.handoffs) == 0
+
+    # Should include the attempted handoff call as a ToolCallItem and a synthetic tool output
+    from cai.sdk.agents import ToolCallItem, ToolCallOutputItem
+
+    assert any(
+        isinstance(item, ToolCallItem)
+        and getattr(item.raw_item, "name", None) == Handoff.default_tool_name(agent_2)
+        for item in result.new_items
+    )
+    assert any(
+        isinstance(item, ToolCallOutputItem)
+        and "Available tools:" in str(item.output)
+        and "Choose the best alternative tool" in str(item.output)
+        for item in result.new_items
+    )
 
 
 @pytest.mark.asyncio
@@ -302,7 +337,12 @@ async def test_file_search_tool_call_parsed_correctly():
 @pytest.mark.asyncio
 async def test_function_web_search_tool_call_parsed_correctly():
     agent = Agent(name="test")
-    web_search_call = ResponseFunctionWebSearch(id="w1", status="completed", type="web_search_call")
+    web_search_call = ResponseFunctionWebSearch(
+        id="w1",
+        status="completed",
+        type="web_search_call",
+        action={"type": "search", "query": "hello world"},
+    )
     response = ModelResponse(
         output=[get_text_message("hello"), web_search_call],
         usage=Usage(),

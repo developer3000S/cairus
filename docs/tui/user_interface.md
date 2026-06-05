@@ -389,9 +389,9 @@ The input area at the bottom provides prompt entry and management:
 - Auto-scrolling for long text
 
 **Keyboard Shortcuts**:
-- `Enter`: Submit prompt (single-line mode)
-- `Shift+Enter`: New line (multi-line mode)
-- `Ctrl+Enter`: Submit multi-line prompt
+- `Enter`: Submit prompt
+- `Shift+Enter`: New line (terminals with extended keyboard protocols)
+- `Alt+Enter`: New line (universal fallback)
 - `Ctrl+U`: Clear input
 - `Up/Down`: Navigate command history
 
@@ -401,8 +401,8 @@ The TUI provides intelligent autocompletion for:
 
 **Commands**:
 - `/clear` - Clear terminal
-- `/save` - Save session
-- `/load` - Load session
+- `/save` - Save as `.jsonl` (for `/load`) or `.md` (readable report)
+- `/load` - Load conversation JSONL (not Markdown exports)
 - `/help` - Show help
 - `/agent` - Switch agent
 - `/model` - Switch model
@@ -459,9 +459,8 @@ Press `Ctrl+P` or click the menu button to open the command palette, which provi
 
 Available commands include:
 - `clear` - Clear terminal output
-- `save` - Save current session
-- `load` - Load previous session
-- `export` - Export conversation
+- `save` - Save as JSONL or Markdown (`/save file.jsonl` or `/save report.md`)
+- `load` - Load JSONL conversation (`/load`; use `.jsonl` from `/save`)
 - `reset` - Reset agent context
 - `help` - Show help information
 

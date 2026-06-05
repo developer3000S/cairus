@@ -86,15 +86,17 @@
 
 ??? question "Where can I list all the environment variables? /env"
 
-    Use **`/env list`** to see the full catalog with **current values** and index numbers for **`/env set`**. Bare **`/env`** shows only `CAI_*` / `CTF_*` keys in the current session.
+    Use **`/env list`** to see all catalog variables with **current values** and index numbers for **`/env set`**. Use bare **`/env`** for **`CAI_*`** / **`CTF_*`** values in the current session only.
     
-    For **full documentation tables** (defaults, constraints, when each applies), run **`/help`** and scroll past the quick guide, or **`/help topics`** and read to the end. For **one variable** in depth, use **`/help var VARIABLE_NAME`** (e.g. `/help var CAI_DEBUG`).
+    For **full documentation tables** (defaults, constraints, when each applies), run bare **`/help`** and scroll past the quick guide. **`/help topics`** lists slash commands by category and how to open **`/help <topic>`** panels (no env tables). For **one variable** in depth, use **`/help var VARIABLE_NAME`** (e.g. `/help var CAI_DEBUG`).
     
     The same topics are covered on the site in [Environment Variables](environment_variables.md).
     
     ![cai-008-config](media/cai-008-config.png)
 
 ??? question "How to know more about the CLI? /help"
+
+    In the **CLI headless** REPL, type **`?`** alone for a compact **input shortcuts** panel. **`/?`** is an alias for **`/help`** (full guide and env tables when bare).
 
     ![cai-006-help](media/cai-006-help.png)
     

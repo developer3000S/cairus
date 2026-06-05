@@ -10,7 +10,7 @@ cai --api --api-host 0.0.0.0 --api-port 8080
 # the next free port and prints it in the console.
 ```
 
-CLI flags and environment variables (API subset):
+CLI flags and environment variables:
 
 | Flag | Env | Description |
 | --- | --- | --- |
@@ -19,8 +19,6 @@ CLI flags and environment variables (API subset):
 | `--api-port` | `CAI_API_PORT` | Bind port (default 8000). |
 | `--api-reload` | `CAI_API_RELOAD` | Dev autoreload. |
 | `--api-workers` | `CAI_API_WORKERS` | Worker processes (ignored with reload). |
-
-For **all** `cai` binary flags (`--tui`, `--resume`, `--yaml`, `--version`, …), see the single source of truth: [CLI commands reference — Binary `cai` CLI flags](cli/commands_reference.md#binary-cai-cli-flags).
 
 Interactive docs at `/api/docs` and OpenAPI spec at `/api/openapi.json`.
 
@@ -146,6 +144,21 @@ Quick index
 - Description: Reset the session agent and clear history.
 - Headers: `X-CAI-API-Key`
 - Response 200: SessionDetailModel
+
+### POST /api/v1/sessions/{id}/cancel
+- Description: Cancel/interrupt the currently running task in a session (equivalent to Ctrl-C in CLI).
+- Headers: `X-CAI-API-Key`
+- Response 200:
+
+```json
+{"cancelled": true, "message": "Task in session <id> has been cancelled"}
+```
+
+or
+
+```json
+{"cancelled": false, "message": "No running task found in session <id>"}
+```
 
 ### POST /api/v1/sessions/{id}/messages
 - Description: Non-streamed inference. Runs the agent and returns the final result.
@@ -295,6 +308,10 @@ Implementation notes (for curious devs)
   - stdout: string
   - stderr: string
   - exit_code: number | null
+
+- CancelTaskResponse
+  - cancelled: boolean
+  - message: string
 
 - CreateSessionRequest
   - agent: string (optional; default from CAI_AGENT_TYPE)

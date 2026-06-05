@@ -105,9 +105,9 @@ Common issues and solutions when using CAI TUI.
 **Symptom**: `/load` command fails
 
 **Solutions**:
-- Verify file path is correct
-- Check JSON format validity
-- Ensure file permissions
+- Verify file path is correct (paths like `~/file.jsonl` are expanded automatically)
+- Use **`.jsonl`** from `/save` or compatible session logs — **not** `/save` **`.md`** exports (those are read-only reports)
+- Ensure file permissions and that the file exists
 
 ### Stats Not Updating
 

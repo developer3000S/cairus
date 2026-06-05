@@ -1,9 +1,9 @@
 """
 Module for CAI REPL key bindings.
 """
-import os
-import subprocess  # nosec B404 - Required for screen clearing
+
 # pylint: disable=import-error
+from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from cai.repl.commands import FuzzyCommandCompleter
@@ -21,24 +21,61 @@ def create_key_bindings(current_text):
     """
     kb = KeyBindings()
 
-    @kb.add('c-l')
-    def _(event):  # pylint: disable=unused-argument
-        """Clear the screen."""
-        # Replace os.system with subprocess.run to avoid shell injection
-        if os.name == 'nt':
-            # Using fixed commands with shell=False is safe
-            subprocess.run(
-                ['cls'],
-                shell=False,
-                check=False)  # nosec B603 B607
-        else:
-            # Using fixed commands with shell=False is safe
-            subprocess.run(
-                ['clear'],
-                shell=False,
-                check=False)  # nosec B603 B607
+    @kb.add("c-d", eager=True)
+    def _discard_eof_when_empty(event):
+        """Buffer empty: swallow key (no submit, no exit). Non-empty: delete char forward."""
+        buf = event.current_buffer
+        if buf.text:
+            buf.delete()
+        # else: intentional no-op — same effect as an unbound key (e.g. Ctrl+F)
 
-    @kb.add('tab')
+    @kb.add("?")
+    def _repl_input_shortcuts_on_question(event):
+        """Empty buffer: show Input shortcuts immediately (no Enter). Non-empty: insert '?'."""
+        buf = event.current_buffer
+        if buf.text:
+            buf.insert_text("?")
+            return
+
+        def _show() -> None:
+            try:
+                from rich.console import Console
+
+                from cai.repl.ui.repl_input_shortcuts import print_repl_input_shortcuts
+                from cai.repl.ui.prompt import _print_separator
+
+                print_repl_input_shortcuts(Console())
+                # Same green line as get_user_input() — that line is only printed once
+                # before prompt(); run_in_terminal breaks the visual frame, so redraw it here.
+                _print_separator()
+            except Exception:
+                # Never break the REPL for a help panel
+                pass
+
+        run_in_terminal(_show)
+        # Do not insert '?' — avoids a duplicate panel if the user presses Enter afterwards.
+
+    @kb.add("c-l")
+    def _(event):
+        """Clear the screen."""
+        event.app.renderer.clear()
+
+    @kb.add("c-o")
+    def _expand_task(event):
+        """Open the compact-mode task expand popup (lists tasks of the current turn)."""
+
+        def _show() -> None:
+            try:
+                from cai.repl.ui.expand_popup import open_expand_popup
+
+                open_expand_popup()
+            except Exception:
+                # Never crash the REPL because of the expand popup
+                pass
+
+        run_in_terminal(_show)
+
+    @kb.add("tab")
     def handle_tab(event):
         """Handle tab key to show completions menu or complete command."""
         buffer = event.current_buffer
@@ -61,9 +98,22 @@ def create_key_bindings(current_text):
             buffer.text = history_suggestion
             buffer.cursor_position = len(history_suggestion)
         else:
-            # If no history suggestion, check for command shadow from fuzzy
-            # completer
-            shadow = FuzzyCommandCompleter().get_command_shadow(text)
+            # If no history suggestion, check for command shadow from the active completer
+            shadow = None
+            completer = getattr(buffer, "completer", None)
+            if completer is None and hasattr(event.app, "completer"):
+                completer = event.app.completer
+
+            if completer is None:
+                # Fallback to a fresh instance (kept for backward compatibility)
+                completer = FuzzyCommandCompleter()
+
+            if hasattr(completer, "get_command_shadow"):
+                try:
+                    shadow = completer.get_command_shadow(text)
+                except Exception:  # pylint: disable=broad-except
+                    shadow = None
+
             if shadow and shadow.startswith(text):
                 # Complete with the shadow
                 buffer.text = shadow
@@ -76,11 +126,35 @@ def create_key_bindings(current_text):
                 # Otherwise, start completion
                 buffer.start_completion(select_first=True)
 
-    @kb.add('escape', 'enter')
-    def handle_escape_enter(event):
+    @kb.add("enter")
+    @kb.add("c-m")
+    def handle_enter(event):
         """
-        Alternative way to insert a newline using Escape followed by Enter.
+        Submit input on Enter / Return (CR).
+
+        With multiline=True, Enter would normally insert a newline.
+        This binding overrides that to submit the input, allowing
+        pasted multiline content to be preserved while Enter still submits.
+        ``c-m`` is bound explicitly because some TTY states after Rich Live /
+        compact UI only deliver carriage return under that name, not ``enter``.
+        Use Shift+Enter or Alt+Enter to insert actual newlines.
         """
-        event.current_buffer.insert_text('\n')
+        event.current_buffer.validate_and_handle()
+
+    # Note: prompt_toolkit represents Alt+Enter as the ("escape", "enter")
+    # key sequence because that's the byte stream terminals emit for Alt+Enter.
+    @kb.add("c-j")
+    @kb.add("escape", "enter")
+    def handle_newline(event):
+        """
+        Insert a newline in the input buffer.
+
+        - Shift+Enter: works in terminals that send LF (c-j) for Shift+Enter
+          while Enter sends CR (c-m). Supported by iTerm2, Kitty, WezTerm,
+          Alacritty (with CSI-u) and most modern terminals when configured.
+        - Alt+Enter: universal fallback for terminals that don't distinguish
+          Shift+Enter from Enter.
+        """
+        event.current_buffer.insert_text("\n")
 
     return kb

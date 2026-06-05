@@ -23,7 +23,12 @@ from cai.sdk.agents.models.openai_chatcompletions import OpenAIChatCompletionsMo
 from cai.sdk.agents.models.openai_provider import OpenAIProvider
 
 import os
-cai_model = os.getenv('CAI_MODEL', "qwen2.5:14b")
+
+cai_model = os.getenv("CAI_MODEL", "qwen2.5:14b")
+
+def assert_sequence_numbers_are_contiguous(events) -> None:
+    assert [event.sequence_number for event in events] == list(range(len(events)))
+
 
 @pytest.mark.allow_call_model_methods
 @pytest.mark.asyncio
@@ -83,6 +88,7 @@ async def test_stream_response_yields_events_for_text_content(monkeypatch) -> No
         tracing=ModelTracing.DISABLED,
     ):
         output_events.append(event)
+    assert_sequence_numbers_are_contiguous(output_events)
     # We expect a response.created, then a response.output_item.added, content part added,
     # two content delta events (for "He" and "llo"), a content part done, the assistant message
     # output_item.done, and finally response.completed.
@@ -172,6 +178,7 @@ async def test_stream_response_yields_events_for_refusal_content(monkeypatch) ->
         tracing=ModelTracing.DISABLED,
     ):
         output_events.append(event)
+    assert_sequence_numbers_are_contiguous(output_events)
     # Expect sequence similar to text: created, output_item.added, content part added,
     # two refusal delta events, content part done, output_item.done, completed.
     assert len(output_events) == 8
@@ -259,6 +266,7 @@ async def test_stream_response_yields_events_for_tool_call(monkeypatch) -> None:
         tracing=ModelTracing.DISABLED,
     ):
         output_events.append(event)
+    assert_sequence_numbers_are_contiguous(output_events)
     # Sequence should be: response.created, then after loop we expect function call-related events:
     # one response.output_item.added for function call, a response.function_call_arguments.delta,
     # a response.output_item.done, and finally response.completed.

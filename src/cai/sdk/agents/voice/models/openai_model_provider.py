@@ -49,9 +49,9 @@ class OpenAIVoiceModelProvider(VoiceModelProvider):
             project: The project to use for the OpenAI client.
         """
         if openai_client is not None:
-            assert api_key is None and base_url is None, (
-                "Don't provide api_key or base_url if you provide openai_client"
-            )
+            assert (
+                api_key is None and base_url is None
+            ), "Don't provide api_key or base_url if you provide openai_client"
             self._client: AsyncOpenAI | None = openai_client
         else:
             self._client = None

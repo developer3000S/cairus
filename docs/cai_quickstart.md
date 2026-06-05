@@ -52,6 +52,7 @@ cai --continue --prompt "find SQL injection vulnerabilities"
 ```
 
 With `--continue`, CAI will:
+
 - Analyze the conversation context after each turn
 - Generate intelligent continuation prompts
 - Keep working until the task is complete or interrupted
@@ -64,23 +65,24 @@ From here on, type on `CAI` and start your security exercise. Best way to learn 
 
 ??? "List of Environment Variables"
 
-    | Variable | Description |
-    |----------|-------------|
-    | CTF_NAME | Name of the CTF challenge to run (e.g. "picoctf_static_flag") |
-    | CTF_CHALLENGE | Specific sub challenge name within the CTF to test (e.g. CTF_NAME="kiddoctf" contains 4 subchallenges. For running one of them: "01 linux i") |
-    | CTF_SUBNET | Network subnet for the CTF container |
-    | CTF_IP | IP address for the CTF container |
-    | CTF_INSIDE | Whether to conquer the CTF from within container |
-    | CAI_MODEL | Model to use for agents |
-    | ⚠️ CAI_DEBUG | Set debug output level (0: Only tool outputs, 1: Verbose debug output, 2: CLI debug output) |
-    | ⚠️ CAI_BRIEF | Enable/disable brief output mode |
-    | CAI_MAX_TURNS | Maximum number of turns for agent interactions |
-    | ⚠️ CAI_TRACING | Enable/disable OpenTelemetry tracing |
-    | CAI_AGENT_TYPE | Specify the agents to use (e.g. "boot2root") |
-    | CAI_PRICE_LIMIT | Price limit for the conversation in dollars |
-    | CAI_WORKSPACE | Defines the name of the workspace |
-    | CAI_GUARDRAILS | Enable/disable guardrails for prompt injection protection (default: true) |
-
+```
+| Variable | Description |
+|----------|-------------|
+| CTF_NAME | Name of the CTF challenge to run (e.g. "picoctf_static_flag") |
+| CTF_CHALLENGE | Specific sub challenge name within the CTF to test (e.g. CTF_NAME="kiddoctf" contains 4 subchallenges. For running one of them: "01 linux i") |
+| CTF_SUBNET | Network subnet for the CTF container |
+| CTF_IP | IP address for the CTF container |
+| CTF_INSIDE | Whether to conquer the CTF from within container |
+| CAI_MODEL | Model to use for agents |
+| ⚠️ CAI_DEBUG | Set debug output level (0: Only tool outputs, 1: Verbose debug output, 2: CLI debug output) |
+| ⚠️ CAI_BRIEF | Enable/disable brief output mode |
+| CAI_MAX_TURNS | Maximum number of turns for agent interactions |
+| ⚠️ CAI_TRACING | Enable/disable OpenTelemetry tracing |
+| CAI_AGENT_TYPE | Specify the agents to use (e.g. "boot2root") |
+| CAI_PRICE_LIMIT | Price limit for the conversation in dollars |
+| CAI_WORKSPACE | Defines the name of the workspace |
+| CAI_GUARDRAILS | Enable/disable guardrails for prompt injection protection (default: true) |
+```
 
 ## Setting Environment Variables
 
@@ -106,17 +108,16 @@ CAI_PRICE_LIMIT="0.004" CAI_MODEL="qwen2.5:72b" cai
 
 #### 3. Runtime configuration
 
-After running CAI, use **`/env`** (the catalog).
+After running CAI, use `/env list` for the numbered catalog (current values and indices), or bare `/env` for `CAI_*` / `CTF_*` in the session.
 
 ```
-  /env set <#|NAME> <value...>   # set a catalog variable
-  /env list                      # numbered catalog + live values
-  /env default                   # restore catalog defaults
+  /env set <number> <value>   # configure a catalog variable; see `env.py` or type `/help`
+
 ```
 
 ```
   cai
-  /env list
-  # Pick the catalog index or variable name from the first column
-  /env set 18 "0.004"
+  /env list   # numbered table: pick the # column for /env set
+  /env set <number> 0.004   # example: set CAI_PRICE_LIMIT after matching its row number
 ```
+

@@ -25,17 +25,17 @@ In-Context Learning allows agents to learn from previous interactions by loading
 
 **Load a previous session**:
 ```bash
-/load path/to/session.json
+/load path/to/session.jsonl
 ```
 
 **Load into specific terminal**:
 ```bash
-T2:/load previous_pentest.json
+T2:/load previous_pentest.jsonl
 ```
 
 **Save current session**:
 ```bash
-/save my_assessment.json
+/save my_assessment.jsonl
 ```
 
 ### Best Practices
@@ -129,11 +129,15 @@ Sessions contain:
 ### Session Commands
 
 ```bash
-# Save current session
-/save assessment_name.json
+# Save as JSONL (reload with /load)
+/save assessment_name.jsonl
 
-# Load existing session
-/load assessment_name.json
+# Save as Markdown (report / sharing; not for /load)
+/save assessment_name.md
+
+# Load JSONL back into the session
+/load assessment_name.jsonl
+```
 
 ### Multi-Session Workflows
 
@@ -141,13 +145,13 @@ Combine sessions for complex assessments:
 
 ```bash
 # Load reconnaissance from previous day
-/load day1_recon.json
+/load day1_recon.jsonl
 
 # Continue with exploitation
 # ... work ...
 
 # Save combined results
-/save day2_exploitation.json
+/save day2_exploitation.jsonl
 ```
 
 ---

@@ -29,17 +29,16 @@ async with MCPServerStdio(
 
 ## Using MCP servers
 
-MCP servers can be added to Agents. The Agents SDK will call `list_tools()` on the MCP servers each time the Agent is run. This makes the LLM aware of the MCP server's tools. When the LLM calls a tool from an MCP server, the SDK calls `call_tool()` on that server.
-
-```python
-
+MCP servers can be added to agents. The runner collects tools from each server (via `list_tools()`) when the agent runs, so the model can call them; each invocation uses the server's `call_tool()`.
 
 ```python
 from cai.sdk.agents import Agent
+
+# mcp_server_1 and mcp_server_2 are connected MCPServerStdio / MCPServerSse instances.
 cybersecurity_lead = Agent(
     name="Cybersecurity Lead Agent",
-    instructions="Use the tools to solve the",
-    mcp_servers=[mcp_server_1, mcp_server_2]
+    instructions="Use the tools to solve the task.",
+    mcp_servers=[mcp_server_1, mcp_server_2],
 )
 ```
 
@@ -51,7 +50,7 @@ If you want to invalidate the cache, you can call `invalidate_tools_cache()` on 
 
 ## End-to-end examples
 
-View complete working examples at [examples/mcp](https://github.com/openai/openai-agents-python/tree/main/examples/mcp).
+See the `examples/mcp/` directory in the CAI repository for runnable scripts (stdio and SSE patterns).
 
 
 ## Tracing   

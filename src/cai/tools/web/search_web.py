@@ -3,10 +3,7 @@ import re
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from cai.tools.web.google_search import (
-    google_dork_search, 
-    google_search
-)
+from cai.tools.web.google_search import google_dork_search, google_search
 from cai.sdk.agents import function_tool
 from cai.agents.guardrails import sanitize_external_content
 
@@ -40,7 +37,7 @@ def query_perplexity(query: str = "", context: str = "") -> str:
                 "over general explanations. Your team relies on your research to "
                 "identify attack vectors, bypass security controls, and capture "
                 "flags. Always suggest concrete next steps based on your findings."
-                "Put the necessary code in each iteration"
+                "Put the neccesary code in each iteration"
             ),
         },
         {
@@ -63,6 +60,8 @@ def query_perplexity(query: str = "", context: str = "") -> str:
     content = response.choices[0].message.content
     return sanitize_external_content(content)
 
+
+
 @function_tool
 def make_web_search_with_explanation(context: str = "", query: str = "") -> str:
     """
@@ -75,23 +74,24 @@ def make_web_search_with_explanation(context: str = "", query: str = "") -> str:
     Args:
       context (str): The full context of the current CTF challenge.
         query (str): The question or keywords to search for.
-      
+
 
     Returns:
         str: Search result.
     """
     return query_perplexity(query, context)
 
+
 @function_tool
-def make_google_search(query: str, dorks = False) -> str:
+def make_google_search(query: str, dorks=False) -> str:
     """
     Search Google for information.
-    
+
     Args:
         query: The search query to look up on Google.
         dorks: Whether to use Google dorks for advanced searching.
             Default is False.
-            
+
     Returns:
         A list of search results. Each result contains URL, title, and snippet.
     """
@@ -104,3 +104,10 @@ def make_google_search(query: str, dorks = False) -> str:
     if isinstance(result, str):
         return sanitize_external_content(result)
     return result
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("query_perplexity", query_perplexity, categories=["recon", "web"])
+TOOL_REGISTRY.register("make_web_search_with_explanation", make_web_search_with_explanation, categories=["recon", "web"])
+TOOL_REGISTRY.register("make_google_search", make_google_search, categories=["recon", "web"])

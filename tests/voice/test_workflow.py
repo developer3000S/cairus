@@ -22,7 +22,11 @@ try:
     from cai.sdk.agents.voice import SingleAgentVoiceWorkflow
 
     from tests.fake_model import get_response_obj
-    from tests.core.test_responses import get_function_tool, get_function_tool_call, get_text_message
+    from tests.core.test_responses import (
+        get_function_tool,
+        get_function_tool_call,
+        get_text_message,
+    )
 except ImportError:
     pass
 
@@ -65,6 +69,7 @@ class FakeStreamingModel(Model):
         tracing: ModelTracing,
     ) -> AsyncIterator[TResponseStreamEvent]:
         output = self.get_next_output()
+        sequence_number = 0
         for item in output:
             if (
                 item.type == "message"
@@ -77,11 +82,14 @@ class FakeStreamingModel(Model):
                     type="response.output_text.delta",
                     output_index=0,
                     item_id=item.id,
+                    sequence_number=sequence_number,
                 )
+                sequence_number += 1
 
         yield ResponseCompletedEvent(
             type="response.completed",
             response=get_response_obj(output),
+            sequence_number=sequence_number,
         )
 
 

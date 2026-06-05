@@ -1,24 +1,36 @@
+"""OpenAI ChatCompletions model -- backward-compatible module.
+
+The utilities that used to live here have been refactored into the
+``chatcompletions/`` sub-package.  This file re-exports them so that
+all existing ``from cai.sdk.agents.models.openai_chatcompletions import X``
+statements continue to work.
+"""
+
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import dataclasses
 import hashlib
 import inspect
 import json
 import os
 import re
-import time
 import sys
+import time
+import uuid
+import weakref
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast, overload
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Final, Literal, Optional, cast, overload
 
-import uuid
+import random
+
+import httpx
 import litellm
 import tiktoken
 from openai import NOT_GIVEN, AsyncOpenAI, AsyncStream, NotGiven
-
-# Create custom InputTokensDetails class since it's not available in current OpenAI version
 from openai._models import BaseModel
 from openai.types import ChatModel
 from openai.types.chat import (
@@ -69,6 +81,7 @@ from openai.types.responses.response_input_param import FunctionCallOutput, Item
 from openai.types.responses.response_usage import OutputTokensDetails
 from wasabi import color
 
+from cai.util._worker_silence import worker_display_silenced
 from cai.sdk.agents.simple_agent_manager import SimpleAgentManager, AGENT_MANAGER
 from cai.sdk.agents.parallel_isolation import PARALLEL_ISOLATION
 from cai.sdk.agents.run_to_jsonl import get_session_recorder
@@ -90,32 +103,69 @@ from cai.util import (
     update_agent_streaming_content,
 )
 
+# --- Refactored submodule imports (new chatcompletions/ package) ------
+from .chatcompletions.token_counter import (
+    count_tokens_with_tiktoken,
+    _check_reasoning_compatibility,
+)
+from .chatcompletions.usage_tracker import InputTokensDetails, CustomResponseUsage
+from .chatcompletions.cache_manager import (
+    normalize_and_apply_cache,
+    normalize_messages_for_cache,
+    apply_cache_control,
+    has_cache_control as _has_cache_control_fn,
+    debug_cache_messages,
+)
+from .chatcompletions.stream_handler import StreamingState
+from .chatcompletions.message_builder import (
+    Converter as _NewConverter,
+    ToolConverter,
+)
+from .chatcompletions.auto_compactor import (
+    auto_compact_if_needed as _auto_compact_if_needed_impl,
+    get_model_max_tokens as _get_model_max_tokens_impl,
+)
+from .chatcompletions.httpx_client import (
+    direct_httpx_completion as _direct_httpx_completion_impl,
+    verbose_http_retries,
+)
+from .chatcompletions.litellm_adapter import (
+    fetch_response_litellm_openai as _fetch_litellm_openai_impl,
+    fetch_response_litellm_ollama as _fetch_litellm_ollama_impl,
+)
+from .chatcompletions.model import (
+    ACTIVE_MODEL_INSTANCES,
+    PERSISTENT_MESSAGE_HISTORIES,
+    _PREVIOUS_TURN_MSG_HASHES,
+    _compaction_in_progress,
+    _current_model_context,
+    set_current_active_model,
+    get_current_active_model,
+    get_agent_message_history,
+    get_all_agent_histories,
+    clear_agent_history,
+    clear_all_histories,
+)
 
-class InputTokensDetails(BaseModel):
-    prompt_tokens: int
-    """The number of prompt tokens."""
-    cached_tokens: int = 0
-    """The number of cached tokens."""
-
-
-# Custom ResponseUsage that makes prompt_tokens/input_tokens and completion_tokens/output_tokens compatible
-class CustomResponseUsage(ResponseUsage):
-    """
-    Custom ResponseUsage class that provides compatibility between different field naming conventions.
-    Works with both input_tokens/output_tokens and prompt_tokens/completion_tokens.
-    """
-
-    @property
-    def prompt_tokens(self) -> int:
-        """Alias for input_tokens to maintain compatibility"""
-        return self.input_tokens
-
-    @property
-    def completion_tokens(self) -> int:
-        """Alias for output_tokens to maintain compatibility"""
-        return self.output_tokens
-
-
+from cai.config import get_config
+from cai.util.llm_api_base import (
+    explicit_custom_llm_api_base_configured,
+    resolve_llm_openai_compatible_base,
+    resolve_llm_openai_compatible_api_key,
+)
+from cai.errors import LLMEmptyAssistantError, LLMRateLimited, LLMTimeout
+from cai.util.gateway_rate_limiter import (
+    COMPLETION_BUDGET_TOKENS,
+    get_gateway_rate_limiter,
+    make_pace_overlay_callback,
+)
+from cai.util.wait_hints import (
+    ModelStreamWaitHints,
+    model_wait_hints,
+    set_model_wait_retry_overlay,
+    sleep_with_retry_backoff_hint,
+)
+from cai.output import OUTPUT, StatusEvent
 from cai.internal.components.metrics import process_intermediate_logs
 
 from .. import _debug
@@ -136,231 +186,167 @@ from .interface import Model, ModelTracing
 if TYPE_CHECKING:
     from ..model_settings import ModelSettings
 
+# --- Crash-prevention helpers -----------------------------------------
 
-# Suppress debug info from litellm
+def _get_first_choice(response):
+    """Safely get first choice from response, or None."""
+    if response.choices and len(response.choices) > 0:
+        return response.choices[0]
+    return None
+
+
+def _empty_completion_max_failures() -> int:
+    """Consecutive empty assistant completions before surfacing ``LLMEmptyAssistantError`` (default 3)."""
+    raw = (os.environ.get("CAI_EMPTY_COMPLETION_MAX_FAILURES") or "3").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = 3
+    return max(1, min(n, 12))
+
+
+# Observed alias1 (~150k window) empty bursts around ~40k prompt tokens while 80%
+# auto-compact only runs near ~120k. Force compact after repeated empties when
+# estimated input exceeds max(floor, fraction * model_max).
+EMPTY_COMPLETION_FORCE_COMPACT_FRACTION: Final[float] = 0.17
+EMPTY_COMPLETION_FORCE_COMPACT_FLOOR: Final[int] = 8_000
+# Matches overflow-recovery path in _fetch_response_litellm_openai (81% > 80% cap).
+EMPTY_COMPLETION_FORCE_COMPACT_CONTEXT_FRACTION: Final[float] = 0.81
+
+
+def _empty_completion_force_compact_threshold(model_max_tokens: int) -> int:
+    """Estimated input tokens above which forced compact may run on empty streaks."""
+    override = (os.environ.get("CAI_EMPTY_COMPLETION_FORCE_COMPACT_MIN_TOKENS") or "").strip()
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    scaled = int(model_max_tokens * EMPTY_COMPLETION_FORCE_COMPACT_FRACTION)
+    return max(EMPTY_COMPLETION_FORCE_COMPACT_FLOOR, scaled)
+
+
+def _should_force_compact_on_empty_streak(
+    empty_streak: int,
+    estimated_input_tokens: int,
+    model_max_tokens: int,
+) -> bool:
+    """True when a second+ empty completion should trigger forced compaction."""
+    if empty_streak < 2:
+        return False
+    return estimated_input_tokens >= _empty_completion_force_compact_threshold(model_max_tokens)
+
+
+def _assistant_reasoning_text(message: Any) -> str:
+    """Visible reasoning/thinking text when a provider omits regular content."""
+    if message is None:
+        return ""
+    rc = getattr(message, "reasoning_content", None)
+    if rc is None and isinstance(message, dict):
+        rc = message.get("reasoning_content")
+    if isinstance(rc, str) and rc.strip():
+        return rc.strip()
+    thinking = getattr(message, "thinking", None)
+    if thinking is None and isinstance(message, dict):
+        thinking = message.get("thinking")
+    if isinstance(thinking, str) and thinking.strip():
+        return thinking.strip()
+    blocks = getattr(message, "thinking_blocks", None)
+    if blocks is None and isinstance(message, dict):
+        blocks = message.get("thinking_blocks")
+    if blocks:
+        for block in blocks:
+            if isinstance(block, dict) and block.get("type") == "thinking":
+                text = block.get("thinking", "")
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+    return ""
+
+
+def _is_effectively_empty_assistant_message(message: Any) -> bool:
+    """True when the API assistant message has no tools, no refusal, and no visible text."""
+    if message is None:
+        return True
+    refusal = getattr(message, "refusal", None)
+    if refusal:
+        return False
+    tc = getattr(message, "tool_calls", None)
+    if tc:
+        return False
+    if _assistant_reasoning_text(message):
+        return False
+    content = getattr(message, "content", None)
+    if content is None:
+        return True
+    if isinstance(content, str):
+        return not content.strip()
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                if part.get("type") == "text" and str(part.get("text", "")).strip():
+                    return False
+            else:
+                txt = getattr(part, "text", None)
+                if txt and str(txt).strip():
+                    return False
+        return True
+    return False
+
+
+def _safe_json_loads(json_str: str, context: str = "") -> dict:
+    """Parse JSON with graceful fallback on decode errors."""
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid JSON{' in ' + context if context else ''}: {e}")
+        return {}
+
+
+# --- Module-level setup (kept here for full backward compat) ----------
 litellm.suppress_debug_info = True
 
-if os.getenv("CAI_MODEL") == "o3-mini" or os.getenv("CAI_MODEL") == "gemini-1.5-pro":
+_startup_model = get_config().model
+if _startup_model in ("o3-mini", "gemini-1.5-pro"):
     litellm.drop_params = True
 
 _USER_AGENT = f"Agents/Python {__version__}"
 _HEADERS = {"User-Agent": _USER_AGENT}
 
-# Global registry to track active model instances
-# This allows us to access instance-based histories for commands like /history
-import weakref
-import contextvars
-
-# DEPRECATED: Use AGENT_REGISTRY instead
-ACTIVE_MODEL_INSTANCES = {}
-
-# Persistent message history store for agents without active instances
-# This allows /load and /flush commands to work even when agents aren't running
-PERSISTENT_MESSAGE_HISTORIES = {}
-
-# Context variable to track the current active model per async context
-_current_model_context = contextvars.ContextVar('current_model', default=None)
-
-def set_current_active_model(model):
-    """Set the current active model for tool execution context."""
-    _current_model_context.set(weakref.ref(model) if model else None)
-
-def get_current_active_model():
-    """Get the current active model."""
-    model_ref = _current_model_context.get()
-    if model_ref:
-        return model_ref()
-    return None
-
-
-def get_agent_message_history(agent_name: str) -> list:
-    """Get message history for a specific agent.
-    
-    With SimpleAgentManager, this is much simpler - we only have one active agent.
-    """
-    # Remove any ID suffix if present (e.g., "[P1]")
-    if "[" in agent_name and agent_name.endswith("]"):
-        base_name = agent_name.rsplit("[", 1)[0].strip()
-    else:
-        base_name = agent_name
-    
-    # Get history from SimpleAgentManager
-    return AGENT_MANAGER.get_message_history(base_name)
-
-
-def get_all_agent_histories() -> dict:
-    """Get all agent message histories.
-    
-    With SimpleAgentManager, we only track the active agent's history.
-    """
-    return AGENT_MANAGER.get_all_histories()
-
-
-def clear_agent_history(agent_name: str):
-    """Clear history for a specific agent.
-    
-    With SimpleAgentManager, this is much simpler.
-    """
-    # Remove any ID suffix if present
-    if "[" in agent_name and agent_name.endswith("]"):
-        base_name = agent_name.rsplit("[", 1)[0].strip()
-    else:
-        base_name = agent_name
-    
-    # Clear from SimpleAgentManager
-    AGENT_MANAGER.clear_history(base_name)
-    
-    # Also clear the current instance if it matches
-    active_agent = AGENT_MANAGER.get_active_agent()
-    if active_agent and hasattr(active_agent, 'message_history'):
-        if hasattr(active_agent, 'agent_name') and active_agent.agent_name == base_name:
-            active_agent.message_history.clear()
-            # Reset context usage for this agent
-            os.environ['CAI_CONTEXT_USAGE'] = '0.0'
-
-
-def clear_all_histories():
-    """Clear all agent histories."""
-    # Clear from SimpleAgentManager
-    AGENT_MANAGER.clear_all_histories()
-    
-    # Clear active agent's history if present
-    active_agent = AGENT_MANAGER.get_active_agent()
-    if active_agent and hasattr(active_agent, 'message_history'):
-        active_agent.message_history.clear()
-    
-    # Clear all persistent histories
-    PERSISTENT_MESSAGE_HISTORIES.clear()
-    
-    # Reset context usage since all histories are cleared
-    os.environ['CAI_CONTEXT_USAGE'] = '0.0'
-
-
+# Backward-compat alias for _StreamingState
 @dataclass
 class _StreamingState:
     started: bool = False
+    sequence_number: int = 0
     text_content_index_and_output: tuple[int, ResponseOutputText] | None = None
     refusal_content_index_and_output: tuple[int, ResponseOutputRefusal] | None = None
     function_calls: dict[int, ResponseFunctionToolCall] = field(default_factory=dict)
 
 
-# Add a new function for consistent token counting using tiktoken
-def _check_reasoning_compatibility(messages):
-    """
-    Check if message history is compatible with Claude reasoning/thinking.
-
-    According to Claude 4 docs, when reasoning is enabled, the final assistant
-    message must start with a thinking block. If there are assistant messages
-    with regular text content, reasoning should be disabled.
-
-    Args:
-        messages: List of message dictionaries
-
-    Returns:
-        bool: True if compatible with reasoning, False otherwise
-    """
-    if not messages:
-        return True  # Empty messages are compatible
-
-    # Find the last assistant message
-    last_assistant_msg = None
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
-            last_assistant_msg = msg
-            break
-
-    if not last_assistant_msg:
-        return True  # No assistant messages, compatible
-
-    # Check if the last assistant message has regular text content
-    content = last_assistant_msg.get("content")
-    if content:
-        # If it's a string with text content, not compatible
-        if isinstance(content, str) and content.strip():
-            return False
-        # If it's a list, check for text content blocks
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    if block.get("type") == "text" and block.get("text", "").strip():
-                        return False
-
-    # Check if message has tool_calls (these are compatible)
-    if last_assistant_msg.get("tool_calls"):
-        return True
-
-    # If no content or only thinking blocks, it's compatible
-    return True
+def _is_effectively_empty_stream_accumulation(
+    state: _StreamingState,
+    streamed_tool_calls: list[Any],
+    output_text: str,
+    streaming_reasoning_text: str,
+) -> bool:
+    """True when a finished stream has no tool calls and no visible assistant text."""
+    if state.function_calls:
+        return False
+    if streamed_tool_calls:
+        return False
+    text = (output_text or "").strip()
+    if not text and state.text_content_index_and_output:
+        text = (getattr(state.text_content_index_and_output[1], "text", None) or "").strip()
+    probe = SimpleNamespace(
+        content=text or None,
+        tool_calls=None,
+        refusal=None,
+        reasoning_content=(streaming_reasoning_text or None),
+    )
+    return _is_effectively_empty_assistant_message(probe)
 
 
-def count_tokens_with_tiktoken(text_or_messages):
-    """
-    Count tokens consistently using tiktoken library.
-    Works with both strings and message lists.
-    Returns a tuple of (input_tokens, reasoning_tokens).
-    """
-    if not text_or_messages:
-        return 0, 0
-
-    try:
-        # Try to use cl100k_base encoding (used by GPT-4 and GPT-3.5-turbo)
-        encoding = tiktoken.get_encoding("cl100k_base")
-    except:
-        # Fall back to GPT-2 encoding if cl100k is not available
-        try:
-            encoding = tiktoken.get_encoding("gpt2")
-        except:
-            # If tiktoken fails, fall back to character estimate
-            if isinstance(text_or_messages, str):
-                return len(text_or_messages) // 4, 0
-            elif isinstance(text_or_messages, list):
-                total_len = 0
-                for msg in text_or_messages:
-                    if isinstance(msg, dict) and "content" in msg:
-                        if isinstance(msg["content"], str):
-                            total_len += len(msg["content"])
-                return total_len // 4, 0
-            else:
-                return 0, 0
-
-    # Process different input types
-    if isinstance(text_or_messages, str):
-        token_count = len(encoding.encode(text_or_messages))
-        return token_count, 0
-    elif isinstance(text_or_messages, list):
-        total_tokens = 0
-        reasoning_tokens = 0
-
-        # Add tokens for the messages format (ChatML format overhead)
-        # Each message has a base overhead (usually ~4 tokens)
-        total_tokens += len(text_or_messages) * 4
-
-        for msg in text_or_messages:
-            if isinstance(msg, dict):
-                # Add tokens for role
-                if "role" in msg:
-                    total_tokens += len(encoding.encode(msg["role"]))
-
-                # Count content tokens
-                if "content" in msg and msg["content"]:
-                    if isinstance(msg["content"], str):
-                        content_tokens = len(encoding.encode(msg["content"]))
-                        total_tokens += content_tokens
-
-                        # Count tokens in assistant messages as reasoning tokens
-                        if msg.get("role") == "assistant":
-                            reasoning_tokens += content_tokens
-                    elif isinstance(msg["content"], list):
-                        for content_part in msg["content"]:
-                            if isinstance(content_part, dict) and "text" in content_part:
-                                part_tokens = len(encoding.encode(content_part["text"]))
-                                total_tokens += part_tokens
-                                if msg.get("role") == "assistant":
-                                    reasoning_tokens += part_tokens
-
-        return total_tokens, reasoning_tokens
-    else:
-        return 0, 0
+# One-shot stderr line when CAI_UNRESTRICTED_LOG=1 (confirm client sends steering payload).
+_UNRESTRICTED_EXTRA_BODY_LOGGED = False
 
 
 class OpenAIChatCompletionsModel(Model):
@@ -380,6 +366,11 @@ class OpenAIChatCompletionsModel(Model):
         self._client = openai_client
         # Check if we're using OLLAMA models
         self.is_ollama = os.getenv("OLLAMA") is not None and os.getenv("OLLAMA").lower() != "false"
+        # Detect alias models for direct httpx bypass (skip LiteLLM overhead)
+        _m = str(model).lower()
+        self._is_alias_model = (
+            "alias" in _m and "alias1.5" not in _m
+        ) or _m == "alias2-mini"
         self.empty_content_error_shown = False
 
         # Track interaction counter and token totals for cli display
@@ -388,6 +379,13 @@ class OpenAIChatCompletionsModel(Model):
         self.total_output_tokens = 0
         self.total_reasoning_tokens = 0
         self.total_cost = 0.0
+        # Per-interaction token tracking
+        self.interaction_input_tokens = 0
+        self.interaction_output_tokens = 0
+        self.interaction_reasoning_tokens = 0
+        # Cache token tracking
+        self.cache_read_tokens = 0
+        self.cache_creation_tokens = 0
         self.agent_name = agent_name
         self.agent_type = agent_type or agent_name.lower().replace(" ", "_")  # For registry tracking
         self.uses_unified_context = False  # Flag to indicate if using shared message history
@@ -442,7 +440,116 @@ class OpenAIChatCompletionsModel(Model):
         # DEPRECATED: Still maintain backward compatibility with ACTIVE_MODEL_INSTANCES
         # TODO: Remove this after updating all dependent code
         ACTIVE_MODEL_INSTANCES[(self._display_name, self.agent_id)] = weakref.ref(self)
-    
+
+    def _shallow_copy_history_messages(self) -> list[dict]:
+        """Shallow-copy ``message_history`` for API requests; keep ``cache_control`` when present."""
+        converted: list[dict] = []
+        if self.message_history:
+            for msg in self.message_history:
+                msg_copy = msg.copy()
+                if "cache_control" in msg:
+                    msg_copy["cache_control"] = msg["cache_control"]
+                converted.append(msg_copy)
+        return converted
+
+    def _messages_for_token_count_after_history_mutation(
+        self,
+        *,
+        system_instructions: str | None,
+        input: str | list[TResponseInputItem],
+    ) -> list[dict]:
+        """Rebuild the message list the API will send (same rules as ``_fetch_response``).
+
+        After auto-compaction mutates ``message_history`` in place, token estimates must not
+        rebuild from ``input`` alone — that drops history and makes ``CAI_CONTEXT_USAGE`` look
+        near zero while the model still receives the full thread.
+        """
+        converted_messages = self._shallow_copy_history_messages()
+        if not self.message_history:
+            converted_messages.extend(self._converter.items_to_messages(input, model_instance=self))
+        if system_instructions:
+            has_system = any(msg.get("role") == "system" for msg in converted_messages)
+            if not has_system:
+                converted_messages.insert(
+                    0,
+                    {"role": "system", "content": system_instructions},
+                )
+            else:
+                for msg in converted_messages:
+                    if msg.get("role") == "system":
+                        msg["content"] = system_instructions
+                        break
+        try:
+            from cai.util import fix_message_list
+
+            return fix_message_list(converted_messages)
+        except Exception:
+            return converted_messages
+
+    # ------------------------------------------------------------------
+    # Retry helper – exponential backoff with jitter
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _backoff_delay(attempt: int, base: float = 5.0, cap: float = 120.0) -> float:
+        """Return seconds to wait: min(cap, base * 2^attempt) + jitter."""
+        delay = min(cap, base * (2 ** attempt)) + random.uniform(0, 3)
+        return delay
+
+    async def _retry_with_backoff(self, attempt: int, kind: str) -> None:
+        """Wait with exponential backoff. Console noise only if CAI_VERBOSE_LLM_RETRY is set."""
+        delay = self._backoff_delay(attempt)
+        msg = f"{kind} (attempt {attempt + 1}/3) — retrying in {delay:.0f}s..."
+        self.logger.warning(f"LLM backoff: {msg}")
+        if verbose_http_retries():
+            OUTPUT.emit(StatusEvent(message=msg, level="warning", agent_id=self.agent_name))
+            from rich.console import Console
+            console = Console()
+            console.print(f"\n[yellow]⚠️  {msg}[/yellow]")
+            await sleep_with_retry_backoff_hint(delay)
+            console.print("[green]↻ Retrying now...[/green]\n")
+        else:
+            await sleep_with_retry_backoff_hint(delay)
+
+    async def _recover_after_empty_completion(
+        self,
+        *,
+        empty_streak: int,
+        estimated_input_tokens: int,
+        input: str | list[TResponseInputItem],
+        system_instructions: str | None,
+    ) -> tuple[str | list[TResponseInputItem], str | None, int]:
+        """Backoff and optionally force compact before retrying after an empty provider response."""
+        model_max = self._get_model_max_tokens(str(self.model))
+        will_force_compact = _should_force_compact_on_empty_streak(
+            empty_streak, estimated_input_tokens, model_max
+        )
+        await self._retry_with_backoff(empty_streak - 1, "Empty assistant completion")
+        if not will_force_compact:
+            return input, system_instructions, estimated_input_tokens
+        try:
+            force_est = max(
+                estimated_input_tokens,
+                int(model_max * EMPTY_COMPLETION_FORCE_COMPACT_CONTEXT_FRACTION),
+            )
+            input, system_instructions, compacted = await self._auto_compact_if_needed(
+                force_est,
+                input,
+                system_instructions,
+            )
+            if compacted:
+                converted_messages = self._messages_for_token_count_after_history_mutation(
+                    system_instructions=system_instructions,
+                    input=input,
+                )
+                estimated_input_tokens, _ = count_tokens_with_tiktoken(converted_messages)
+                if model_max > 0:
+                    os.environ["CAI_CONTEXT_USAGE"] = str(
+                        min(1.0, max(0.0, estimated_input_tokens / model_max))
+                    )
+        except Exception as e:
+            self.logger.warning("Forced compaction after empty completion failed: %s", e)
+        return input, system_instructions, estimated_input_tokens
+
     def get_full_display_name(self) -> str:
         """Get the full display name including ID."""
         return f"{self._display_name} [{self.agent_id}]"
@@ -463,13 +570,30 @@ class OpenAIChatCompletionsModel(Model):
             # Ignore any errors during cleanup
             pass
 
-    def add_to_message_history(self, msg):
-        """Add a message to this instance's history if it's not a duplicate.
-        
+    def add_to_message_history(self, msg, skip_deduplication: bool = False):
+        """Add a message to this instance's history.
+
+        Args:
+            msg: The message dictionary to add
+            skip_deduplication: If True, skip all duplicate checking and just append.
+                              Use this when loading session history where messages
+                              are already in correct order and deduplication would
+                              cause reordering issues.
+
         Now only adds to the instance's local history, no global registry.
         """
+        # When loading session history, skip all deduplication to preserve order
+        if skip_deduplication:
+            self.message_history.append(msg)
+            manager_history = AGENT_MANAGER.get_message_history(self.agent_name)
+            if manager_history is not self.message_history:
+                AGENT_MANAGER.add_to_history(self.agent_name, msg)
+            if PARALLEL_ISOLATION.is_parallel_mode() and self.agent_id:
+                PARALLEL_ISOLATION.update_isolated_history(self.agent_id, msg)
+            return
+
         is_duplicate = False
-        
+
         if self.message_history:
             if msg.get("role") in ["system", "user"]:
                 is_duplicate = any(
@@ -478,27 +602,31 @@ class OpenAIChatCompletionsModel(Model):
                     for existing in self.message_history
                 )
             elif msg.get("role") == "assistant" and msg.get("tool_calls"):
-                # For tool calls, remove any existing message with the same tool call ID
-                # This handles the case where streaming might create duplicate entries
-                tool_call_id = msg["tool_calls"][0].get("id")
-                # Remove duplicates in-place to preserve list reference (important for swarm patterns)
-                indices_to_remove = []
-                for i, existing in enumerate(self.message_history):
-                    if (existing.get("role") == "assistant"
-                        and existing.get("tool_calls")
-                        and existing["tool_calls"][0].get("id") == tool_call_id):
-                        indices_to_remove.append(i)
-                # Remove in reverse order to avoid index shifting
-                for i in reversed(indices_to_remove):
-                    self.message_history.pop(i)
-                is_duplicate = False  # Always add after removing duplicates
+                # For tool calls, check if message with same tool call ID already exists
+                # If it does, UPDATE IN PLACE to preserve message order
+                tool_call_id = msg["tool_calls"][0].get("id") if msg.get("tool_calls") else None
+                if tool_call_id:
+                    existing_idx = None
+                    for i, existing in enumerate(self.message_history):
+                        if (existing.get("role") == "assistant"
+                            and existing.get("tool_calls")
+                            and existing["tool_calls"][0].get("id") == tool_call_id):
+                            existing_idx = i
+                            break
+
+                    if existing_idx is not None:
+                        # UPDATE IN PLACE to preserve order (don't remove and re-add!)
+                        self.message_history[existing_idx] = msg
+                        is_duplicate = True  # Mark as duplicate so we don't append again
+                    else:
+                        is_duplicate = False
             elif msg.get("role") == "tool":
                 is_duplicate = any(
                     existing.get("role") == "tool"
                     and existing.get("tool_call_id") == msg.get("tool_call_id")
                     for existing in self.message_history
                 )
-        
+
         if not is_duplicate:
             self.message_history.append(msg)
             # Also update SimpleAgentManager ONLY if they're not the same list reference
@@ -527,10 +655,18 @@ class OpenAIChatCompletionsModel(Model):
         handoffs: list[Handoff],
         tracing: ModelTracing,
     ) -> ModelResponse:
+        # Close any open streaming panels from the previous cycle
+        # This ensures panels don't stay open when the model starts a new inference
+        try:
+            from cai.util import close_all_streaming_panels
+            close_all_streaming_panels()
+        except ImportError:
+            pass
+
         # Increment the interaction counter for CLI display
         self.interaction_counter += 1
         self._intermediate_logs()
-        
+
         # Set this as the current active model for tool execution context
         set_current_active_model(self)
 
@@ -546,21 +682,12 @@ class OpenAIChatCompletionsModel(Model):
         ) as span_generation:
             # Prepare the messages for consistent token counting
             # IMPORTANT: Include existing message history for context
-            converted_messages = []
-            
-            # First, add all existing messages from history
-            if self.message_history:
-                for msg in self.message_history:
-                    msg_copy = msg.copy()  # Use copy to avoid modifying original
-                    # Remove any existing cache_control to avoid exceeding the 4-block limit
-                    if "cache_control" in msg_copy:
-                        del msg_copy["cache_control"]
-                    converted_messages.append(msg_copy)
-            
+            converted_messages = self._shallow_copy_history_messages()
+
             # Then convert and add the new input
             new_messages = self._converter.items_to_messages(input, model_instance=self)
             converted_messages.extend(new_messages)
-            
+
             if system_instructions:
                 # Check if we already have a system message
                 has_system = any(msg.get("role") == "system" for msg in converted_messages)
@@ -573,61 +700,6 @@ class OpenAIChatCompletionsModel(Model):
                         },
                     )
 
-            # Add support for prompt caching for claude (not automatically applied)
-            # Gemini supports it too
-            # https://www.anthropic.com/news/token-saving-updates
-            # Maximize cache efficiency by using up to 4 cache_control blocks
-            if (str(self.model).startswith("claude") or "gemini" in str(self.model)) and len(
-                converted_messages
-            ) > 0:
-                # Strategy: Cache the most valuable messages for maximum savings
-                # 1. System message (always first priority)
-                # 2. Long user messages (high token count)
-                # 3. Assistant messages with tool calls (complex context)
-                # 4. Recent context (last message)
-
-                cache_candidates = []
-
-                # Always cache system message if present
-                for i, msg in enumerate(converted_messages):
-                    if msg.get("role") == "system":
-                        cache_candidates.append((i, len(str(msg.get("content", ""))), "system"))
-                        break
-
-                # Find long user messages and assistant messages with tool calls
-                for i, msg in enumerate(converted_messages):
-                    content_len = len(str(msg.get("content", "")))
-                    role = msg.get("role")
-
-                    if role == "user" and content_len > 500:  # Long user messages
-                        cache_candidates.append((i, content_len, "user"))
-                    elif role == "assistant" and msg.get("tool_calls"):  # Tool calls
-                        cache_candidates.append(
-                            (i, content_len + 200, "assistant_tools")
-                        )  # Bonus for tool calls
-
-                # Always consider the last message for recent context
-                if len(converted_messages) > 1:
-                    last_idx = len(converted_messages) - 1
-                    last_msg = converted_messages[last_idx]
-                    last_content_len = len(str(last_msg.get("content", "")))
-                    cache_candidates.append((last_idx, last_content_len, "recent"))
-
-                # Sort by value (content length) and select top 4 unique indices
-                cache_candidates.sort(key=lambda x: x[1], reverse=True)
-                selected_indices = []
-                for idx, _, msg_type in cache_candidates:
-                    if idx not in selected_indices:
-                        selected_indices.append(idx)
-                        if len(selected_indices) >= 4:  # Max 4 cache blocks
-                            break
-
-                # Apply cache_control to selected messages
-                for idx in selected_indices:
-                    msg_copy = converted_messages[idx].copy()
-                    msg_copy["cache_control"] = {"type": "ephemeral"}
-                    converted_messages[idx] = msg_copy
-
             # # --- Add to message_history: user, system, and assistant tool call messages ---
             # # Add system prompt to message_history
             # if system_instructions:
@@ -637,31 +709,30 @@ class OpenAIChatCompletionsModel(Model):
             #     }
             #     self.add_to_message_history(sys_msg)
 
-            # Add user prompt(s) to message_history
+            # Add user messages to message_history.
+            # add_to_message_history() has built-in dedup (same role+content),
+            # so repeated calls with the same message within a Runner loop are safe.
             if isinstance(input, str):
-                user_msg = {"role": "user", "content": input}
-                self.add_to_message_history(user_msg)
-                # Log the user message
+                self.add_to_message_history({"role": "user", "content": input})
                 self.logger.log_user_message(input)
             elif isinstance(input, list):
                 for item in input:
-                    # Try to extract user messages
-                    if isinstance(item, dict):
-                        if item.get("role") == "user":
-                            user_msg = {"role": "user", "content": item.get("content", "")}
-                            self.add_to_message_history(user_msg)
-                            # Log the user message
-                            if item.get("content"):
-                                self.logger.log_user_message(item.get("content"))
+                    if isinstance(item, dict) and item.get("role") == "user":
+                        self.add_to_message_history(
+                            {"role": "user", "content": item.get("content", "")}
+                        )
 
             # IMPORTANT: Ensure the message list has valid tool call/result pairs
-            # This needs to happen before the API call to prevent errors
+            # This needs to happen before the API call AND before applying cache_control
             try:
                 from cai.util import fix_message_list
 
                 converted_messages = fix_message_list(converted_messages)
             except Exception:
                 pass
+
+            # Request-path message normalization/cache-control is applied in _fetch_response().
+            # Keep startup estimation lightweight to avoid duplicate per-turn preprocessing work.
 
             # Get token count estimate before API call for consistent counting
             estimated_input_tokens, _ = count_tokens_with_tiktoken(converted_messages)
@@ -674,12 +745,18 @@ class OpenAIChatCompletionsModel(Model):
             # Check if auto-compaction is needed
             input, system_instructions, compacted = await self._auto_compact_if_needed(estimated_input_tokens, input, system_instructions)
             
-            # If compaction occurred, recalculate tokens with new input
+            # If compaction occurred, recalculate tokens from the same view ``_fetch_response`` uses
             if compacted:
-                converted_messages = self._converter.items_to_messages(input, model_instance=self)
-                if system_instructions:
-                    converted_messages.insert(0, {"role": "system", "content": system_instructions})
+                converted_messages = self._messages_for_token_count_after_history_mutation(
+                    system_instructions=system_instructions,
+                    input=input,
+                )
                 estimated_input_tokens, _ = count_tokens_with_tiktoken(converted_messages)
+                max_tok = self._get_model_max_tokens(str(self.model))
+                if max_tok > 0:
+                    os.environ["CAI_CONTEXT_USAGE"] = str(
+                        min(1.0, max(0.0, estimated_input_tokens / max_tok))
+                    )
 
             # Pre-check price limit using estimated input tokens and a conservative estimate for output
             # This prevents starting a request that would immediately exceed the price limit
@@ -697,22 +774,129 @@ class OpenAIChatCompletionsModel(Model):
                     raise
 
             try:
-                response = await self._fetch_response(
-                    system_instructions,
-                    input,
-                    model_settings,
-                    tools,
-                    output_schema,
-                    handoffs,
-                    span_generation,
-                    tracing,
-                    stream=False,
-                )
+                max_empty_failures = _empty_completion_max_failures()
+                empty_streak = 0
+                response = None
+                # ``model_wait_hints`` wraps the whole retry loop so the body
+                # stays published across attempts (no flicker between iterations).
+                # The ``try/finally`` clears any retry/pacing overlay even when
+                # ``_fetch_response`` raises a typed error that propagates out.
+                _on_pace = make_pace_overlay_callback()
+                async with model_wait_hints():
+                    try:
+                        while True:
+                            # Proactive client-side pacing for the alias gateway
+                            # (TPM/RPM per API key). The projection adds a small
+                            # completion-token buffer because the gateway counts
+                            # input+output against TPM but we only know input
+                            # before the call; ``Reservation.update_actual``
+                            # reconciles to the real total once the response
+                            # arrives. The limiter's 85% safety margin absorbs
+                            # any residual drift between our tiktoken estimate
+                            # and the gateway's authoritative accounting (the
+                            # gateway does not expose ``x-ratelimit-*`` headers,
+                            # confirmed by direct probe).
+                            if self._is_alias_model:
+                                _projection = estimated_input_tokens + COMPLETION_BUDGET_TOKENS
+                                async with get_gateway_rate_limiter().alias_gateway_slot(
+                                    _projection,
+                                    on_pace=_on_pace,
+                                ) as _reservation:
+                                    response = await self._fetch_response(
+                                        system_instructions,
+                                        input,
+                                        model_settings,
+                                        tools,
+                                        output_schema,
+                                        handoffs,
+                                        span_generation,
+                                        tracing,
+                                        stream=False,
+                                    )
+                                    # Reconcile pre-flight estimate with the
+                                    # gateway's real ``prompt + completion``
+                                    # so the deque tracks ground truth for
+                                    # subsequent pacing decisions.
+                                    try:
+                                        _usage = getattr(response, "usage", None)
+                                        if _usage is not None:
+                                            _real = (
+                                                int(getattr(_usage, "prompt_tokens", 0) or 0)
+                                                + int(getattr(_usage, "completion_tokens", 0) or 0)
+                                            )
+                                            _reservation.update_actual(_real)
+                                    except Exception:
+                                        pass
+                            else:
+                                response = await self._fetch_response(
+                                    system_instructions,
+                                    input,
+                                    model_settings,
+                                    tools,
+                                    output_schema,
+                                    handoffs,
+                                    span_generation,
+                                    tracing,
+                                    stream=False,
+                                )
+                            first_choice = _get_first_choice(response)
+                            if not first_choice:
+                                raise AgentsException("LLM returned response with no choices")
+                            if _is_effectively_empty_assistant_message(first_choice.message):
+                                empty_streak += 1
+                                _empty_usage = getattr(response, "usage", None)
+                                _empty_msg = first_choice.message
+                                self.logger.warning(
+                                    "Empty assistant completion (%s/%s); "
+                                    "pt=%s ct=%s reasoning_len=%s tools=%s; repeating.",
+                                    empty_streak,
+                                    max_empty_failures,
+                                    (
+                                        getattr(_empty_usage, "prompt_tokens", None)
+                                        if _empty_usage
+                                        else None
+                                    ),
+                                    (
+                                        getattr(_empty_usage, "completion_tokens", None)
+                                        if _empty_usage
+                                        else None
+                                    ),
+                                    len(
+                                        str(
+                                            getattr(_empty_msg, "reasoning_content", None)
+                                            or ""
+                                        )
+                                    ),
+                                    len(getattr(_empty_msg, "tool_calls", None) or []),
+                                )
+                                if empty_streak >= max_empty_failures:
+                                    stop_active_timer()
+                                    start_idle_timer()
+                                    raise LLMEmptyAssistantError(
+                                        "Consecutive empty assistant completions from the provider.",
+                                        {"attempts": max_empty_failures},
+                                    )
+                                input, system_instructions, estimated_input_tokens = (
+                                    await self._recover_after_empty_completion(
+                                        empty_streak=empty_streak,
+                                        estimated_input_tokens=estimated_input_tokens,
+                                        input=input,
+                                        system_instructions=system_instructions,
+                                    )
+                                )
+                                set_model_wait_retry_overlay(
+                                    "Provider returned an empty response; "
+                                    f"retrying ({empty_streak}/{max_empty_failures})…"
+                                )
+                                continue
+                            break
+                    finally:
+                        set_model_wait_retry_overlay(None)
             except KeyboardInterrupt:
-                # Handle KeyboardInterrupt during API call
-                # Clean up any pending tool calls that weren't executed
+                # Handle KeyboardInterrupt during API call.
+                # ``alias_gateway_slot`` already released any in-flight
+                # reservation before KbInt propagated to this handler.
                 if hasattr(self, "_pending_tool_calls"):
-                    # Clear all pending tool calls to prevent incomplete history
                     self._pending_tool_calls.clear()
 
                 # Let the interrupt propagate up to end the current operation
@@ -721,14 +905,131 @@ class OpenAIChatCompletionsModel(Model):
 
                 raise
 
+            except (litellm.exceptions.Timeout, LLMTimeout) as e:
+                # High-level timeout recovery with exponential backoff
+                self.logger.warning(f"Timeout error: {e}")
+                stop_active_timer()
+                start_idle_timer()
+
+                if not hasattr(self, "_high_level_retry_count"):
+                    self._high_level_retry_count = 0
+                self._high_level_retry_count += 1
+
+                if self._high_level_retry_count > 3:
+                    self._high_level_retry_count = 0
+                    raise LLMTimeout(f"Timed out after 3 attempts [{self.model}]") from e
+
+                # Exponential backoff — NO "continue" injected into history
+                await self._retry_with_backoff(self._high_level_retry_count - 1, "Timeout")
+
+                # Clean retry: re-send the SAME input, don't pollute history
+                result = await self.get_response(
+                    system_instructions, input, model_settings,
+                    tools, output_schema, handoffs, tracing,
+                )
+                self._high_level_retry_count = 0
+                return result
+
+            except (litellm.exceptions.RateLimitError, LLMRateLimited) as e:
+                # High-level rate-limit recovery with exponential backoff
+                self.logger.warning(f"Rate limit (high-level): {e}")
+                stop_active_timer()
+                start_idle_timer()
+
+                if not hasattr(self, "_high_level_retry_count"):
+                    self._high_level_retry_count = 0
+                self._high_level_retry_count += 1
+
+                if self._high_level_retry_count > 3:
+                    self._high_level_retry_count = 0
+                    raise LLMRateLimited(
+                        f"Rate limit after 3 attempts [{self.model}]",
+                        retry_after=getattr(e, "retry_after", None),
+                    ) from e
+
+                # Exponential backoff — NO "continue" injected into history
+                await self._retry_with_backoff(self._high_level_retry_count - 1, "Rate limit")
+
+                # Clean retry: re-send the SAME input
+                result = await self.get_response(
+                    system_instructions, input, model_settings,
+                    tools, output_schema, handoffs, tracing,
+                )
+                self._high_level_retry_count = 0
+                return result
+
+            except (
+                litellm.exceptions.BadGatewayError,
+                litellm.exceptions.ServiceUnavailableError,
+                litellm.exceptions.InternalServerError,
+            ) as e:
+                # Transient server errors (502, 503, 500): retry with backoff
+                self.logger.warning(f"Server error (high-level recovery): {str(e)[:200]}")
+
+                stop_active_timer()
+                start_idle_timer()
+
+                if not hasattr(self, "_high_level_retry_count"):
+                    self._high_level_retry_count = 0
+                self._high_level_retry_count += 1
+
+                if self._high_level_retry_count > 3:
+                    self._high_level_retry_count = 0
+                    if verbose_http_retries():
+                        print(f"\n❌ Server error after 3 recovery attempts [{self.model}]")
+                    raise
+
+                wait_secs = 10 * self._high_level_retry_count  # 10s, 20s, 30s
+                self.logger.warning(
+                    f"Server error recovery attempt {self._high_level_retry_count}/3 "
+                    f"({type(e).__name__}), waiting {wait_secs}s"
+                )
+                if verbose_http_retries():
+                    from rich.console import Console
+                    console = Console()
+                    console.print(
+                        f"\n[yellow]⚠️  Server error (attempt {self._high_level_retry_count}/3): "
+                        f"{type(e).__name__}[/yellow]"
+                    )
+                    console.print(f"[yellow]Waiting {wait_secs}s before retrying...[/yellow]")
+
+                await sleep_with_retry_backoff_hint(wait_secs)
+
+                if verbose_http_retries():
+                    from rich.console import Console
+                    Console().print("[green]Retrying request...[/green]\n")
+
+                stop_idle_timer()
+                start_active_timer()
+
+                result = await self.get_response(
+                    system_instructions,
+                    input,
+                    model_settings,
+                    tools,
+                    output_schema,
+                    handoffs,
+                    tracing,
+                )
+                self._high_level_retry_count = 0
+                return result
+
             if _debug.DONT_LOG_MODEL_DATA:
                 logger.debug("Received model response")
             else:
                 import json
 
-                logger.debug(
-                    f"LLM resp:\n{json.dumps(response.choices[0].message.model_dump(), indent=2)}\n"
-                )
+                _first = _get_first_choice(response)
+                if _first:
+                    if _is_effectively_empty_assistant_message(_first.message):
+                        logger.debug(
+                            "LLM resp: assistant message is empty (no full JSON dump — "
+                            "see CAI_DEBUG=2 if you need the raw object)."
+                        )
+                    else:
+                        logger.debug(
+                            f"LLM resp:\n{json.dumps(_first.message.model_dump(), indent=2)}\n"
+                        )
 
             # Ensure we have reasonable token counts
             if response.usage:
@@ -754,6 +1055,36 @@ class OpenAIChatCompletionsModel(Model):
             # Update token totals for CLI display
             self.total_input_tokens += input_tokens
             self.total_output_tokens += output_tokens
+            # Update per-interaction tokens (reset each call)
+            self.interaction_input_tokens = input_tokens
+            self.interaction_output_tokens = output_tokens
+            # Extract and update cache tokens
+            # Support both Anthropic format (cache_read_input_tokens) and OpenAI format (prompt_tokens_details.cached_tokens)
+            if response.usage:
+                # Try Anthropic format first
+                cache_read = getattr(response.usage, 'cache_read_input_tokens', 0) or 0
+                # Fallback to OpenAI format (prompt_tokens_details.cached_tokens)
+                if not cache_read:
+                    prompt_details = getattr(response.usage, 'prompt_tokens_details', None)
+                    if prompt_details:
+                        cache_read = getattr(prompt_details, 'cached_tokens', 0) or 0
+                self.cache_read_tokens = cache_read
+                # cache_creation_tokens is Anthropic-only (OpenAI doesn't charge for cache writes)
+                self.cache_creation_tokens = getattr(response.usage, 'cache_creation_input_tokens', 0) or 0
+
+                # Also update COST_TRACKER so it's available for tool panels
+                try:
+                    import cai.util
+                    cai.util.COST_TRACKER.interaction_input_tokens = self.interaction_input_tokens
+                    cai.util.COST_TRACKER.interaction_output_tokens = self.interaction_output_tokens
+                    cai.util.COST_TRACKER.interaction_reasoning_tokens = self.interaction_reasoning_tokens
+                    cai.util.COST_TRACKER.cache_read_tokens = self.cache_read_tokens
+                    cai.util.COST_TRACKER.cache_creation_tokens = self.cache_creation_tokens
+                except Exception:
+                    pass
+            else:
+                self.cache_read_tokens = 0
+                self.cache_creation_tokens = 0
             reasoning_tokens = 0
             if (
                 response.usage
@@ -773,7 +1104,9 @@ class OpenAIChatCompletionsModel(Model):
                     reasoning_tokens = 0
 
                 self.total_reasoning_tokens += reasoning_tokens
-            
+            # Update per-interaction reasoning tokens
+            self.interaction_reasoning_tokens = reasoning_tokens
+
             # Process costs for non-streaming mode
             model_name = str(self.model)
             interaction_cost = calculate_model_cost(model_name, input_tokens, output_tokens)
@@ -790,7 +1123,9 @@ class OpenAIChatCompletionsModel(Model):
                     input_tokens,
                     output_tokens,
                     reasoning_tokens,
-                    interaction_cost
+                    interaction_cost,
+                    agent_name=self.agent_name,
+                    agent_id=self.agent_id
                 )
                 
                 # Process total cost
@@ -799,7 +1134,9 @@ class OpenAIChatCompletionsModel(Model):
                     self.total_input_tokens,
                     self.total_output_tokens,
                     self.total_reasoning_tokens,
-                    None
+                    None,
+                    agent_name=self.agent_name,
+                    agent_id=self.agent_id
                 )
                 
                 # Track usage globally
@@ -827,12 +1164,14 @@ class OpenAIChatCompletionsModel(Model):
             tool_output = None
             should_display_message = True
 
+            _first_choice = _get_first_choice(response)
             if (
-                hasattr(response.choices[0].message, "tool_calls")
-                and response.choices[0].message.tool_calls
+                _first_choice
+                and hasattr(_first_choice.message, "tool_calls")
+                and _first_choice.message.tool_calls
             ):
                 # For each tool call in the message, get corresponding output if available
-                for tool_call in response.choices[0].message.tool_calls:
+                for tool_call in _first_choice.message.tool_calls:
                     call_id = tool_call.id
 
                     # Check if this tool call has already been displayed
@@ -854,7 +1193,7 @@ class OpenAIChatCompletionsModel(Model):
                             if tool_args is None or (isinstance(tool_args, str) and tool_args.strip() == ""):
                                 tool_args = "{}"
                             
-                            args = json.loads(tool_args)
+                            args = _safe_json_loads(tool_args, "tool_call arguments")
                             # Check if this is a regular command (not a session command)
                             if (
                                 isinstance(args, dict)
@@ -873,7 +1212,7 @@ class OpenAIChatCompletionsModel(Model):
                                 is_async_session_input = True
                                 # Check if this has auto_output flag
                                 has_auto_output = args.get("auto_output", False)
-                        except:
+                        except (json.JSONDecodeError, AttributeError, TypeError):
                             pass
 
                         # For regular commands that were already shown via streaming, suppress the agent message
@@ -936,10 +1275,12 @@ class OpenAIChatCompletionsModel(Model):
 
             # Additional check: Always show messages that have text content
             # This ensures agent explanations are not suppressed
+            _fc = _get_first_choice(response)
             if (
-                hasattr(response.choices[0].message, "content")
-                and response.choices[0].message.content
-                and str(response.choices[0].message.content).strip()
+                _fc
+                and hasattr(_fc.message, "content")
+                and _fc.message.content
+                and str(_fc.message.content).strip()
             ):
                 # If the message has actual text content, always show it
                 should_display_message = True
@@ -950,10 +1291,20 @@ class OpenAIChatCompletionsModel(Model):
                 previous_stream_setting = os.environ.get("CAI_STREAM", "false")
                 os.environ["CAI_STREAM"] = "false"  # Force non-streaming mode for markdown parsing
 
+                # Extract cache metrics for display
+                # Support both Anthropic format and OpenAI format (prompt_tokens_details.cached_tokens)
+                cache_create = getattr(response.usage, 'cache_creation_input_tokens', None) if response.usage else None
+                cache_read = getattr(response.usage, 'cache_read_input_tokens', None) if response.usage else None
+                # Fallback to OpenAI format if Anthropic format not available
+                if not cache_read and response.usage:
+                    prompt_details = getattr(response.usage, 'prompt_tokens_details', None)
+                    if prompt_details:
+                        cache_read = getattr(prompt_details, 'cached_tokens', None)
+
                 # Print the agent message for CLI display
                 cli_print_agent_messages(
                     agent_name=getattr(self, "agent_name", "Agent"),
-                    message=response.choices[0].message,
+                    message=_get_first_choice(response).message if _get_first_choice(response) else None,
                     counter=getattr(self, "interaction_counter", 0),
                     model=str(self.model),
                     debug=False,
@@ -967,6 +1318,8 @@ class OpenAIChatCompletionsModel(Model):
                     total_cost=total_cost,
                     tool_output=tool_output,  # Pass tool_output only when needed
                     suppress_empty=True,  # Keep suppress_empty=True as requested
+                    cache_creation_tokens=cache_create,
+                    cache_read_tokens=cache_read,
                 )
 
                 # Restore previous streaming setting
@@ -975,7 +1328,10 @@ class OpenAIChatCompletionsModel(Model):
             # --- DEFERRED: Tool calls are no longer added immediately ---
             # Tool calls will be added atomically with their responses
             # to prevent incomplete message history on interruption
-            assistant_msg = response.choices[0].message
+            _first_for_msg = _get_first_choice(response)
+            if not _first_for_msg:
+                raise AgentsException("LLM returned response with no choices")
+            assistant_msg = _first_for_msg.message
             if hasattr(assistant_msg, "tool_calls") and assistant_msg.tool_calls:
                 # Store pending tool calls but don't add to history yet
                 if not hasattr(self, "_pending_tool_calls"):
@@ -985,7 +1341,7 @@ class OpenAIChatCompletionsModel(Model):
                 # Fix Google Gemini OpenAI compatibility issues.
                 # When using the OpenAI-compatible API to call tools with Google Gemini
                 # tool_call.id is returned as an empty string.
-                if "openai/gemini" in os.getenv("CAI_MODEL"):
+                if "openai/gemini" in get_config().model:
                     for tool_call in assistant_msg.tool_calls:
                         if tool_call.id is None or tool_call.id == "":
                             tool_call.id = uuid.uuid4().hex[:16]
@@ -1023,11 +1379,24 @@ class OpenAIChatCompletionsModel(Model):
                     # Store the tool call by ID for later reference
                     import time
 
+                    current_time = time.time()
+
+                    # Periodic cleanup of old tool calls (older than 5 minutes)
+                    # This prevents unbounded growth and memory issues
+                    if len(self._converter.recent_tool_calls) > 50:
+                        stale_threshold = current_time - 300  # 5 minutes
+                        stale_keys = [
+                            k for k, v in self._converter.recent_tool_calls.items()
+                            if v.get("start_time", 0) < stale_threshold
+                        ]
+                        for k in stale_keys:
+                            del self._converter.recent_tool_calls[k]
+
                     self._converter.recent_tool_calls[tool_call.id] = {
                         "name": tool_call.function.name,
                         "arguments": tool_call.function.arguments,
-                        "start_time": time.time(),
-                        "execution_info": {"start_time": time.time()},
+                        "start_time": current_time,
+                        "execution_info": {"start_time": current_time},
                     }
 
                 # Log the assistant tool call message
@@ -1045,24 +1414,31 @@ class OpenAIChatCompletionsModel(Model):
                     )
                 self.logger.log_assistant_message(None, tool_calls_list)
             # If the assistant message is just text, add it as well
-            elif hasattr(assistant_msg, "content") and assistant_msg.content:
-                asst_msg = {"role": "assistant", "content": assistant_msg.content}
-                self.add_to_message_history(asst_msg)
-                # Log the assistant message
-                self.logger.log_assistant_message(assistant_msg.content)
+            else:
+                text_out = None
+                if hasattr(assistant_msg, "content") and assistant_msg.content:
+                    text_out = assistant_msg.content
+                else:
+                    reasoning_text = _assistant_reasoning_text(assistant_msg)
+                    if reasoning_text:
+                        text_out = reasoning_text
+                if text_out:
+                    asst_msg = {"role": "assistant", "content": text_out}
+                    self.add_to_message_history(asst_msg)
+                    self.logger.log_assistant_message(text_out)
 
             # En no-streaming, también necesitamos añadir cualquier tool output al message_history
             # Esto se hace procesando los items de output del ModelResponse
-            items = self._converter.message_to_output_items(response.choices[0].message)
+            items = self._converter.message_to_output_items(assistant_msg)
 
             # Además, necesitamos añadir los tool outputs que se hayan generado
             # durante la ejecución de las herramientas
             if hasattr(_Converter, "tool_outputs"):
                 for call_id, output_content in self._converter.tool_outputs.items():
-                    # Verificar si ya existe un mensaje tool con este call_id en message_history
+                    # Verificar si ya existe un mensaje tool con este call_id en self.message_history
                     tool_msg_exists = any(
                         msg.get("role") == "tool" and msg.get("tool_call_id") == call_id
-                        for msg in message_history
+                        for msg in self.message_history
                     )
 
                     if not tool_msg_exists:
@@ -1088,24 +1464,42 @@ class OpenAIChatCompletionsModel(Model):
                 self.agent_name,
             )
 
+            # Extract cache metrics from response if available
+            # Support both Anthropic format and OpenAI format (prompt_tokens_details.cached_tokens)
+            cache_creation = None
+            cache_read = None
+            if response.usage:
+                cache_creation = getattr(response.usage, 'cache_creation_input_tokens', None)
+                cache_read = getattr(response.usage, 'cache_read_input_tokens', None)
+                # Fallback to OpenAI format if Anthropic format not available
+                if not cache_read:
+                    prompt_details = getattr(response.usage, 'prompt_tokens_details', None)
+                    if prompt_details:
+                        cache_read = getattr(prompt_details, 'cached_tokens', None)
+
             usage = (
                 Usage(
                     requests=1,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=input_tokens + output_tokens,
+                    cache_creation_input_tokens=cache_creation,
+                    cache_read_input_tokens=cache_read,
                 )
                 if response.usage or input_tokens > 0
                 else Usage()
             )
-            if tracing.include_data():
-                span_generation.span_data.output = [response.choices[0].message.model_dump()]
+            _trace_choice = _get_first_choice(response)
+            if tracing.include_data() and _trace_choice:
+                span_generation.span_data.output = [_trace_choice.message.model_dump()]
             span_generation.span_data.usage = {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
             }
 
-            items = self._converter.message_to_output_items(response.choices[0].message)
+            if not _trace_choice:
+                raise AgentsException("LLM returned response with no choices")
+            items = self._converter.message_to_output_items(_trace_choice.message)
 
             # For non-streaming responses, make sure we also log token usage with compatible field names
             # This ensures both streaming and non-streaming use consistent naming
@@ -1143,14 +1537,25 @@ class OpenAIChatCompletionsModel(Model):
         output_schema: AgentOutputSchema | None,
         handoffs: list[Handoff],
         tracing: ModelTracing,
+        *,
+        _empty_completion_streak: int = 0,
     ) -> AsyncIterator[TResponseStreamEvent]:
         """
         Yields a partial message as it is generated, as well as the usage information.
         """
+        # Close any open streaming panels from the previous cycle
+        # This ensures panels don't stay open when the model starts a new inference
+        try:
+            from cai.util import close_all_streaming_panels
+            close_all_streaming_panels()
+        except ImportError:
+            pass
+
         # Initialize streaming contexts as None
         streaming_context = None
         thinking_context = None
         stream_interrupted = False
+        stream_wait_hints: ModelStreamWaitHints | None = None
 
         try:
             # IMPORTANT: Pre-process input to ensure it's in the correct format
@@ -1194,22 +1599,17 @@ class OpenAIChatCompletionsModel(Model):
             start_active_timer()
 
             # --- Check if streaming should be shown in rich panel ---
+            # Sub-agents invoked as tools by the orchestration agent must not
+            # render Rich streaming panels — only the orchestrator's final
+            # synthesis is shown to the user. See ``_worker_silence``.
             should_show_rich_stream = (
-                os.getenv("CAI_STREAM", "false").lower() == "true"
+                get_config().stream
                 and not self.disable_rich_streaming
+                and not worker_display_silenced()
             )
 
-            # Create streaming context if needed
-            if should_show_rich_stream:
-                try:
-                    streaming_context = create_agent_streaming_context(
-                        agent_name=self.agent_name,
-                        counter=self.interaction_counter,
-                        model=str(self.model),
-                    )
-                except Exception as e:
-                    # Silently fall back to non-streaming display
-                    streaming_context = None
+            # Lazy-init Rich Live: build streaming_context on first text delta (not before HTTP),
+            # so startup work (terminal sizing, Live allocation) stays off the pre-TTFT path.
 
             with generation_span(
                 model=str(self.model),
@@ -1218,70 +1618,24 @@ class OpenAIChatCompletionsModel(Model):
                 disabled=tracing.is_disabled(),
             ) as span_generation:
                 # Prepare messages for consistent token counting
-                converted_messages = self._converter.items_to_messages(input, model_instance=self)
+                # IMPORTANT: Include existing message history for context (matching get_response pattern)
+                converted_messages = self._shallow_copy_history_messages()
+
+                # Then convert and add the new input
+                new_messages = self._converter.items_to_messages(input, model_instance=self)
+                converted_messages.extend(new_messages)
+
                 if system_instructions:
-                    converted_messages.insert(
-                        0,
-                        {
-                            "content": system_instructions,
-                            "role": "system",
-                        },
-                    )
-
-                # Add support for prompt caching for claude (not automatically applied)
-                # Gemini supports it too
-                # https://www.anthropic.com/news/token-saving-updates
-                # Maximize cache efficiency by using up to 4 cache_control blocks
-                if (str(self.model).startswith("claude") or "gemini" in str(self.model)) and len(
-                    converted_messages
-                ) > 0:
-                    # Strategy: Cache the most valuable messages for maximum savings
-                    # 1. System message (always first priority)
-                    # 2. Long user messages (high token count)
-                    # 3. Assistant messages with tool calls (complex context)
-                    # 4. Recent context (last message)
-
-                    cache_candidates = []
-
-                    # Always cache system message if present
-                    for i, msg in enumerate(converted_messages):
-                        if msg.get("role") == "system":
-                            cache_candidates.append((i, len(str(msg.get("content", ""))), "system"))
-                            break
-
-                    # Find long user messages and assistant messages with tool calls
-                    for i, msg in enumerate(converted_messages):
-                        content_len = len(str(msg.get("content", "")))
-                        role = msg.get("role")
-
-                        if role == "user" and content_len > 500:  # Long user messages
-                            cache_candidates.append((i, content_len, "user"))
-                        elif role == "assistant" and msg.get("tool_calls"):  # Tool calls
-                            cache_candidates.append(
-                                (i, content_len + 200, "assistant_tools")
-                            )  # Bonus for tool calls
-
-                    # Always consider the last message for recent context
-                    if len(converted_messages) > 1:
-                        last_idx = len(converted_messages) - 1
-                        last_msg = converted_messages[last_idx]
-                        last_content_len = len(str(last_msg.get("content", "")))
-                        cache_candidates.append((last_idx, last_content_len, "recent"))
-
-                    # Sort by value (content length) and select top 4 unique indices
-                    cache_candidates.sort(key=lambda x: x[1], reverse=True)
-                    selected_indices = []
-                    for idx, _, msg_type in cache_candidates:
-                        if idx not in selected_indices:
-                            selected_indices.append(idx)
-                            if len(selected_indices) >= 4:  # Max 4 cache blocks
-                                break
-
-                    # Apply cache_control to selected messages
-                    for idx in selected_indices:
-                        msg_copy = converted_messages[idx].copy()
-                        msg_copy["cache_control"] = {"type": "ephemeral"}
-                        converted_messages[idx] = msg_copy
+                    # Check if we already have a system message
+                    has_system = any(msg.get("role") == "system" for msg in converted_messages)
+                    if not has_system:
+                        converted_messages.insert(
+                            0,
+                            {
+                                "content": system_instructions,
+                                "role": "system",
+                            },
+                        )
 
                 #    # --- Add to message_history: user, system prompts ---
                 #     if system_instructions:
@@ -1305,18 +1659,37 @@ class OpenAIChatCompletionsModel(Model):
                                 # Log the user message
                                 if item.get("content"):
                                     self.logger.log_user_message(item.get("content"))
+
+                # IMPORTANT: Ensure the message list has valid tool call/result pairs
+                # This needs to happen before the API call AND before applying cache_control
+                try:
+                    from cai.util import fix_message_list
+
+                    converted_messages = fix_message_list(converted_messages)
+                except Exception:
+                    pass
+
+                # Request-path message normalization/cache-control is applied in _fetch_response().
+                # Keep startup estimation lightweight to avoid duplicate per-turn preprocessing work.
+
                 # Get token count estimate before API call for consistent counting
                 estimated_input_tokens, _ = count_tokens_with_tiktoken(converted_messages)
 
                 # Check if auto-compaction is needed
                 input, system_instructions, compacted = await self._auto_compact_if_needed(estimated_input_tokens, input, system_instructions)
                 
-                # If compaction occurred, recalculate tokens with new input
+                # If compaction occurred, recalculate tokens from the same view ``_fetch_response`` uses
                 if compacted:
-                    converted_messages = self._converter.items_to_messages(input, model_instance=self)
-                    if system_instructions:
-                        converted_messages.insert(0, {"role": "system", "content": system_instructions})
+                    converted_messages = self._messages_for_token_count_after_history_mutation(
+                        system_instructions=system_instructions,
+                        input=input,
+                    )
                     estimated_input_tokens, _ = count_tokens_with_tiktoken(converted_messages)
+                    max_tok = self._get_model_max_tokens(str(self.model))
+                    if max_tok > 0:
+                        os.environ["CAI_CONTEXT_USAGE"] = str(
+                            min(1.0, max(0.0, estimated_input_tokens / max_tok))
+                        )
 
                 # Pre-check price limit using estimated input tokens and a conservative estimate for output
                 # This prevents starting a stream that would immediately exceed the price limit
@@ -1339,24 +1712,130 @@ class OpenAIChatCompletionsModel(Model):
                         start_idle_timer()
                         raise
 
-                response, stream = await self._fetch_response(
-                    system_instructions,
-                    input,
-                    model_settings,
-                    tools,
-                    output_schema,
-                    handoffs,
-                    span_generation,
-                    tracing,
-                    stream=True,
-                )
+                stream_wait_hints = ModelStreamWaitHints()
+                await stream_wait_hints.start()
+                # Proactive client-side pacing for the alias gateway. The
+                # stream wait hint is already active and reads
+                # ``_retry_overlay_message``, so the overlay surfaces
+                # automatically. ``alias_gateway_slot`` auto-releases on
+                # pre-gateway errors (connect failures, KbInt) so a burst
+                # doesn't pin the budget for 60s.
+                _stream_on_pace = make_pace_overlay_callback()
+                try:
+                    if self._is_alias_model:
+                        # Streaming pacing: same projection (+completion buffer)
+                        # as get_response. ``Reservation.update_actual`` is NOT
+                        # called here — final ``usage`` arrives at end-of-stream
+                        # outside the slot. The limiter's 85% safety margin
+                        # absorbs that residual estimation gap.
+                        _stream_projection = estimated_input_tokens + COMPLETION_BUDGET_TOKENS
+                        async with get_gateway_rate_limiter().alias_gateway_slot(
+                            _stream_projection,
+                            on_pace=_stream_on_pace,
+                        ):
+                            response, stream = await self._fetch_response(
+                                system_instructions,
+                                input,
+                                model_settings,
+                                tools,
+                                output_schema,
+                                handoffs,
+                                span_generation,
+                                tracing,
+                                stream=True,
+                            )
+                    else:
+                        response, stream = await self._fetch_response(
+                            system_instructions,
+                            input,
+                            model_settings,
+                            tools,
+                            output_schema,
+                            handoffs,
+                            span_generation,
+                            tracing,
+                            stream=True,
+                        )
+                    # Clear any pacing overlay so the default stream body
+                    # ("Esperando…") shows during the HTTP response read.
+                    set_model_wait_retry_overlay(None)
+                except KeyboardInterrupt:
+                    await stream_wait_hints.stop()
+                    set_model_wait_retry_overlay(None)
+                    stop_active_timer()
+                    start_idle_timer()
+                    raise
+                except (litellm.exceptions.Timeout, LLMTimeout) as e:
+                    await stream_wait_hints.stop()
+                    # Streaming timeout with exponential backoff — clean retry
+                    self.logger.warning(f"Timeout in stream_response: {e}")
+                    stop_active_timer()
+                    start_idle_timer()
+
+                    if not hasattr(self, "_high_level_retry_count"):
+                        self._high_level_retry_count = 0
+                    self._high_level_retry_count += 1
+
+                    if self._high_level_retry_count > 3:
+                        self._high_level_retry_count = 0
+                        raise LLMTimeout(f"Timed out after 3 attempts [{self.model}]") from e
+
+                    await self._retry_with_backoff(self._high_level_retry_count - 1, "Timeout")
+
+                    # Clean retry: same input, no "continue" in history
+                    async for event in self.stream_response(
+                        system_instructions, input, model_settings,
+                        tools, output_schema, handoffs, tracing,
+                    ):
+                        yield event
+                    self._high_level_retry_count = 0
+                    return
+
+                except (litellm.exceptions.RateLimitError, LLMRateLimited) as e:
+                    await stream_wait_hints.stop()
+                    # Streaming rate-limit with exponential backoff — clean retry
+                    self.logger.warning(f"Rate limit in stream_response: {e}")
+                    stop_active_timer()
+                    start_idle_timer()
+
+                    if not hasattr(self, "_high_level_retry_count"):
+                        self._high_level_retry_count = 0
+                    self._high_level_retry_count += 1
+
+                    if self._high_level_retry_count > 3:
+                        self._high_level_retry_count = 0
+                        raise LLMRateLimited(
+                            f"Rate limit after 3 attempts [{self.model}]",
+                            retry_after=getattr(e, "retry_after", None),
+                        ) from e
+
+                    await self._retry_with_backoff(self._high_level_retry_count - 1, "Rate limit")
+
+                    # Clean retry: same input, no "continue" in history
+                    async for event in self.stream_response(
+                        system_instructions, input, model_settings,
+                        tools, output_schema, handoffs, tracing,
+                    ):
+                        yield event
+                    self._high_level_retry_count = 0
+                    return
+
+                except BaseException:
+                    await stream_wait_hints.stop()
+                    raise
 
                 usage: CompletionUsage | None = None
                 state = _StreamingState()
 
+                def next_sequence_number() -> int:
+                    sequence_number = state.sequence_number
+                    state.sequence_number += 1
+                    return sequence_number
+
                 # Manual token counting (when API doesn't provide it)
                 output_text = ""
                 estimated_output_tokens = 0
+                streaming_reasoning_text = ""
 
                 # Initialize a streaming text accumulator for rich display
                 streaming_text_buffer = ""
@@ -1392,6 +1871,8 @@ class OpenAIChatCompletionsModel(Model):
 
                 try:
                     async for chunk in stream:
+                        await stream_wait_hints.stop()
+
                         # Check if we've been interrupted
                         if stream_interrupted:
                             break
@@ -1400,6 +1881,7 @@ class OpenAIChatCompletionsModel(Model):
                             state.started = True
                             yield ResponseCreatedEvent(
                                 response=response,
+                                sequence_number=next_sequence_number(),
                                 type="response.created",
                             )
 
@@ -1496,6 +1978,8 @@ class OpenAIChatCompletionsModel(Model):
 
                         # Update thinking display if we have reasoning content
                         if reasoning_content:
+                            if isinstance(reasoning_content, str):
+                                streaming_reasoning_text += reasoning_content
                             if thinking_context:
                                 # Streaming mode: Update the rich thinking display
                                 from cai.util import update_claude_thinking_content
@@ -1548,6 +2032,19 @@ class OpenAIChatCompletionsModel(Model):
 
                             # Update streaming display if enabled - ALWAYS respect CAI_STREAM setting
                             # Both thinking and regular content should stream if streaming is enabled
+                            if (
+                                should_show_rich_stream
+                                and streaming_context is None
+                            ):
+                                try:
+                                    streaming_context = create_agent_streaming_context(
+                                        agent_name=self.agent_name,
+                                        counter=self.interaction_counter,
+                                        model=str(self.model),
+                                    )
+                                except Exception:
+                                    streaming_context = None
+
                             if streaming_context:
                                 # Calculate cost for current interaction
                                 current_cost = calculate_model_cost(
@@ -1679,6 +2176,7 @@ class OpenAIChatCompletionsModel(Model):
                                 yield ResponseOutputItemAddedEvent(
                                     item=assistant_item,
                                     output_index=0,
+                                    sequence_number=next_sequence_number(),
                                     type="response.output_item.added",
                                 )
                                 yield ResponseContentPartAddedEvent(
@@ -1690,6 +2188,7 @@ class OpenAIChatCompletionsModel(Model):
                                         type="output_text",
                                         annotations=[],
                                     ),
+                                    sequence_number=next_sequence_number(),
                                     type="response.content_part.added",
                                 )
                             # Emit the delta for this segment of content
@@ -1697,6 +2196,8 @@ class OpenAIChatCompletionsModel(Model):
                                 content_index=state.text_content_index_and_output[0],
                                 delta=content,
                                 item_id=FAKE_RESPONSES_ID,
+                                logprobs=[],
+                                sequence_number=next_sequence_number(),
                                 output_index=0,
                                 type="response.output_text.delta",
                             )
@@ -1729,6 +2230,7 @@ class OpenAIChatCompletionsModel(Model):
                                 yield ResponseOutputItemAddedEvent(
                                     item=assistant_item,
                                     output_index=0,
+                                    sequence_number=next_sequence_number(),
                                     type="response.output_item.added",
                                 )
                                 yield ResponseContentPartAddedEvent(
@@ -1740,6 +2242,7 @@ class OpenAIChatCompletionsModel(Model):
                                         type="output_text",
                                         annotations=[],
                                     ),
+                                    sequence_number=next_sequence_number(),
                                     type="response.content_part.added",
                                 )
                             # Emit the delta for this segment of refusal
@@ -1747,6 +2250,7 @@ class OpenAIChatCompletionsModel(Model):
                                 content_index=state.refusal_content_index_and_output[0],
                                 delta=refusal_content,
                                 item_id=FAKE_RESPONSES_ID,
+                                sequence_number=next_sequence_number(),
                                 output_index=0,
                                 type="response.refusal.delta",
                             )
@@ -1897,7 +2401,7 @@ class OpenAIChatCompletionsModel(Model):
                                             debug=False,
                                             interaction_input_tokens=estimated_input_tokens,
                                             interaction_output_tokens=estimated_output_tokens,
-                                            interaction_reasoning_tokens=0,  # Not available during streaming yet
+                                            interaction_reasoning_tokens=0,
                                             total_input_tokens=getattr(
                                                 self, "total_input_tokens", 0
                                             )
@@ -1911,8 +2415,8 @@ class OpenAIChatCompletionsModel(Model):
                                             ),
                                             interaction_cost=None,
                                             total_cost=None,
-                                            tool_output=None,  # Will be shown once tool is executed
-                                            suppress_empty=True,  # Prevent empty panels
+                                            tool_output=None,
+                                            suppress_empty=True,
                                         )
                                         # Set flag to suppress final output to avoid duplication
                                         self.suppress_final_output = True
@@ -1943,7 +2447,9 @@ class OpenAIChatCompletionsModel(Model):
                         if json_start >= 0 and json_end > json_start:
                             json_str = ollama_full_content[json_start:json_end]
                             # Try to parse the JSON
-                            parsed = json.loads(json_str)
+                            parsed = _safe_json_loads(json_str, "Ollama function call")
+                            if not parsed:
+                                raise ValueError("Failed to parse Ollama function call JSON")
 
                             # Check if it looks like a function call
                             if "name" in parsed and "arguments" in parsed:
@@ -1963,13 +2469,13 @@ class OpenAIChatCompletionsModel(Model):
                                     arguments_str = json.dumps(parsed["arguments"])
                                 elif isinstance(parsed["arguments"], str):
                                     # If it's already a string, check if it's valid JSON
-                                    try:
-                                        # Try parsing to validate and remove 'ctf' if present
-                                        args_dict = json.loads(parsed["arguments"])
+                                    # Try parsing to validate and remove 'ctf' if present
+                                    args_dict = _safe_json_loads(parsed["arguments"], "Ollama tool arguments")
+                                    if args_dict:
                                         if isinstance(args_dict, dict) and "ctf" in args_dict:
                                             del args_dict["ctf"]
                                         arguments_str = json.dumps(args_dict)
-                                    except:
+                                    else:
                                         # If not valid JSON, encode it as a JSON string
                                         arguments_str = json.dumps(parsed["arguments"])
                                 else:
@@ -2030,18 +2536,22 @@ class OpenAIChatCompletionsModel(Model):
                                         debug=False,
                                         interaction_input_tokens=estimated_input_tokens,
                                         interaction_output_tokens=estimated_output_tokens,
-                                        interaction_reasoning_tokens=0,  # Not available for Ollama
-                                        total_input_tokens=getattr(self, "total_input_tokens", 0)
+                                        interaction_reasoning_tokens=0,
+                                        total_input_tokens=getattr(
+                                            self, "total_input_tokens", 0
+                                        )
                                         + estimated_input_tokens,
-                                        total_output_tokens=getattr(self, "total_output_tokens", 0)
+                                        total_output_tokens=getattr(
+                                            self, "total_output_tokens", 0
+                                        )
                                         + estimated_output_tokens,
                                         total_reasoning_tokens=getattr(
                                             self, "total_reasoning_tokens", 0
                                         ),
                                         interaction_cost=None,
                                         total_cost=None,
-                                        tool_output=None,  # Will be shown once the tool is executed
-                                        suppress_empty=True,  # Suppress empty panels during streaming
+                                        tool_output=None,
+                                        suppress_empty=True,
                                     )
 
                                     # Set flag to suppress final output to avoid duplication
@@ -2076,6 +2586,71 @@ class OpenAIChatCompletionsModel(Model):
                     except Exception:
                         pass
 
+                if _is_effectively_empty_stream_accumulation(
+                    state,
+                    streamed_tool_calls,
+                    output_text,
+                    streaming_reasoning_text,
+                ):
+                    empty_streak = _empty_completion_streak + 1
+                    max_empty_failures = _empty_completion_max_failures()
+                    self.logger.warning(
+                        "Empty streamed assistant completion (%s/%s); "
+                        "pt_est=%s reasoning_len=%s tools=%s; repeating.",
+                        empty_streak,
+                        max_empty_failures,
+                        estimated_input_tokens,
+                        len(streaming_reasoning_text),
+                        len(streamed_tool_calls) + len(state.function_calls),
+                    )
+                    if empty_streak >= max_empty_failures:
+                        stop_active_timer()
+                        start_idle_timer()
+                        raise LLMEmptyAssistantError(
+                            "Consecutive empty assistant completions from the provider.",
+                            {"attempts": max_empty_failures},
+                        )
+                    if streaming_context:
+                        try:
+                            finish_agent_streaming(streaming_context, None)
+                        except Exception:
+                            pass
+                        streaming_context = None
+                    if thinking_context:
+                        try:
+                            from cai.util import finish_claude_thinking_display
+
+                            finish_claude_thinking_display(thinking_context)
+                        except Exception:
+                            pass
+                        thinking_context = None
+                    await stream_wait_hints.stop()
+                    set_model_wait_retry_overlay(None)
+                    input, system_instructions, estimated_input_tokens = (
+                        await self._recover_after_empty_completion(
+                            empty_streak=empty_streak,
+                            estimated_input_tokens=estimated_input_tokens,
+                            input=input,
+                            system_instructions=system_instructions,
+                        )
+                    )
+                    set_model_wait_retry_overlay(
+                        "Provider returned an empty response; "
+                        f"retrying ({empty_streak}/{max_empty_failures})…"
+                    )
+                    async for event in self.stream_response(
+                        system_instructions,
+                        input,
+                        model_settings,
+                        tools,
+                        output_schema,
+                        handoffs,
+                        tracing,
+                        _empty_completion_streak=empty_streak,
+                    ):
+                        yield event
+                    return
+
                 function_call_starting_index = 0
                 if state.text_content_index_and_output:
                     function_call_starting_index += 1
@@ -2085,6 +2660,7 @@ class OpenAIChatCompletionsModel(Model):
                         item_id=FAKE_RESPONSES_ID,
                         output_index=0,
                         part=state.text_content_index_and_output[1],
+                        sequence_number=next_sequence_number(),
                         type="response.content_part.done",
                     )
 
@@ -2096,6 +2672,7 @@ class OpenAIChatCompletionsModel(Model):
                         item_id=FAKE_RESPONSES_ID,
                         output_index=0,
                         part=state.refusal_content_index_and_output[1],
+                        sequence_number=next_sequence_number(),
                         type="response.content_part.done",
                     )
 
@@ -2111,6 +2688,7 @@ class OpenAIChatCompletionsModel(Model):
                             type="function_call",
                         ),
                         output_index=function_call_starting_index,
+                        sequence_number=next_sequence_number(),
                         type="response.output_item.added",
                     )
                     # Then, yield the args
@@ -2118,6 +2696,7 @@ class OpenAIChatCompletionsModel(Model):
                         delta=function_call.arguments,
                         item_id=FAKE_RESPONSES_ID,
                         output_index=function_call_starting_index,
+                        sequence_number=next_sequence_number(),
                         type="response.function_call_arguments.delta",
                     )
                     # Finally, the ResponseOutputItemDone
@@ -2130,6 +2709,7 @@ class OpenAIChatCompletionsModel(Model):
                             type="function_call",
                         ),
                         output_index=function_call_starting_index,
+                        sequence_number=next_sequence_number(),
                         type="response.output_item.done",
                     )
 
@@ -2153,6 +2733,7 @@ class OpenAIChatCompletionsModel(Model):
                     yield ResponseOutputItemDoneEvent(
                         item=assistant_msg,
                         output_index=0,
+                        sequence_number=next_sequence_number(),
                         type="response.output_item.done",
                     )
 
@@ -2171,6 +2752,16 @@ class OpenAIChatCompletionsModel(Model):
                     input_tokens = usage.prompt_tokens
                 if usage and hasattr(usage, "completion_tokens") and usage.completion_tokens > 0:
                     output_tokens = usage.completion_tokens
+
+                # Extract cache metrics from the usage object (if available from direct HTTP path)
+                # Support both Anthropic format and OpenAI format (prompt_tokens_details.cached_tokens)
+                cache_creation = getattr(usage, 'cache_creation_input_tokens', None) if usage else None
+                cache_read = getattr(usage, 'cache_read_input_tokens', None) if usage else None
+                # Fallback to OpenAI format if Anthropic format not available
+                if not cache_read and usage:
+                    prompt_details = getattr(usage, 'prompt_tokens_details', None)
+                    if prompt_details:
+                        cache_read = getattr(prompt_details, 'cached_tokens', None)
 
                 # Create a proper usage object with our token counts
                 final_response.usage = CustomResponseUsage(
@@ -2196,10 +2787,13 @@ class OpenAIChatCompletionsModel(Model):
                         and usage.prompt_tokens_details.cached_tokens
                         else 0,
                     },
+                    cache_creation_input_tokens=cache_creation,
+                    cache_read_input_tokens=cache_read,
                 )
 
                 yield ResponseCompletedEvent(
                     response=final_response,
+                    sequence_number=next_sequence_number(),
                     type="response.completed",
                 )
 
@@ -2272,7 +2866,9 @@ class OpenAIChatCompletionsModel(Model):
                         and final_response.usage.output_tokens_details
                         and hasattr(final_response.usage.output_tokens_details, "reasoning_tokens")
                         else 0,
-                        interaction_cost
+                        interaction_cost,
+                        agent_name=self.agent_name,
+                        agent_id=self.agent_id
                     )
                     
                     # Process the total cost (updates session total correctly)
@@ -2281,7 +2877,9 @@ class OpenAIChatCompletionsModel(Model):
                         total_input,
                         total_output,
                         getattr(self, "total_reasoning_tokens", 0),
-                        None  # Let it calculate from tokens
+                        None,  # Let it calculate from tokens
+                        agent_name=self.agent_name,
+                        agent_id=self.agent_id
                     )
                     
                     # Track usage globally
@@ -2304,6 +2902,30 @@ class OpenAIChatCompletionsModel(Model):
 
                 # Store the total cost for future recording
                 self.total_cost = total_cost
+                # Update per-interaction tokens for tool panels
+                self.interaction_input_tokens = int(interaction_input)
+                self.interaction_output_tokens = int(interaction_output)
+                self.interaction_reasoning_tokens = int(
+                    final_response.usage.output_tokens_details.reasoning_tokens
+                    if final_response.usage
+                    and final_response.usage.output_tokens_details
+                    and hasattr(final_response.usage.output_tokens_details, "reasoning_tokens")
+                    else 0
+                )
+                # Update cache tokens for tool panels
+                self.cache_read_tokens = int(cache_read) if cache_read else 0
+                self.cache_creation_tokens = int(cache_creation) if cache_creation else 0
+
+                # Also update COST_TRACKER so it's available for tool panels
+                try:
+                    import cai.util
+                    cai.util.COST_TRACKER.interaction_input_tokens = self.interaction_input_tokens
+                    cai.util.COST_TRACKER.interaction_output_tokens = self.interaction_output_tokens
+                    cai.util.COST_TRACKER.interaction_reasoning_tokens = self.interaction_reasoning_tokens
+                    cai.util.COST_TRACKER.cache_read_tokens = self.cache_read_tokens
+                    cai.util.COST_TRACKER.cache_creation_tokens = self.cache_creation_tokens
+                except Exception:
+                    pass
 
                 # Create final stats with explicit type conversion for all values
                 final_stats = {
@@ -2321,6 +2943,8 @@ class OpenAIChatCompletionsModel(Model):
                     "total_reasoning_tokens": int(getattr(self, "total_reasoning_tokens", 0)),
                     "interaction_cost": float(interaction_cost),
                     "total_cost": float(total_cost),
+                    "cache_read_tokens": int(cache_read) if cache_read else 0,
+                    "cache_creation_tokens": int(cache_creation) if cache_creation else 0,
                 }
 
                 # At the end of streaming, finish the streaming context if we were using it
@@ -2453,6 +3077,12 @@ class OpenAIChatCompletionsModel(Model):
             # Always clean up resources
             # This block executes whether the try block succeeds, fails, or is interrupted
 
+            if stream_wait_hints is not None:
+                try:
+                    await stream_wait_hints.stop()
+                except Exception:
+                    pass
+
             # Clean up streaming context
             if streaming_context:
                 try:
@@ -2542,96 +3172,56 @@ class OpenAIChatCompletionsModel(Model):
         tracing: ModelTracing,
         stream: bool = False,
     ) -> ChatCompletion | tuple[Response, AsyncStream[ChatCompletionChunk]]:
+        # Debug: Print when entering _fetch_response
+        if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+            print(f"[CACHE-DEBUG] _fetch_response called, stream={stream}, model={self.model}")
+
         # start by re-fetching self.is_ollama
         self.is_ollama = os.getenv("OLLAMA") is not None and os.getenv("OLLAMA").lower() == "true"
 
         # IMPORTANT: Include existing message history for context
-        converted_messages = []
-        
-        # First, add all existing messages from history
-        if self.message_history:
-            for msg in self.message_history:
-                msg_copy = msg.copy()  # Use copy to avoid modifying original
-                # Remove any existing cache_control to avoid exceeding the 4-block limit
-                if "cache_control" in msg_copy:
-                    del msg_copy["cache_control"]
-                converted_messages.append(msg_copy)
-        
-        # Then convert and add the new input
-        new_messages = self._converter.items_to_messages(input, model_instance=self)
-        converted_messages.extend(new_messages)
+        converted_messages = self._shallow_copy_history_messages()
+
+        # IMPORTANT: We maintain our own message_history which already contains all messages.
+        # The SDK also passes 'input' with conversation items, but these duplicate what we have.
+        # To avoid duplication: if we have message_history, DON'T add anything from input.
+        # The caller (get_response/get_streamed_response) already adds messages to our history.
+        if not self.message_history:
+            # First turn: no history yet, so we need to use input
+            new_messages = self._converter.items_to_messages(input, model_instance=self)
+            converted_messages.extend(new_messages)
 
         if system_instructions:
             # Check if we already have a system message
             has_system = any(msg.get("role") == "system" for msg in converted_messages)
             if not has_system:
+                # Inject shared session context if available
+                from cai.sdk.agents.simple_agent_manager import AGENT_MANAGER
+                shared_context = AGENT_MANAGER.get_shared_context_injection()
+                
+                final_system_instructions = system_instructions + shared_context
+                
                 converted_messages.insert(
                     0,
                     {
-                        "content": system_instructions,
+                        "content": final_system_instructions,
                         "role": "system",
                     },
                 )
-
-        # Add support for prompt caching for claude (not automatically applied)
-        # Gemini supports it too
-        # https://www.anthropic.com/news/token-saving-updates
-        # Maximize cache efficiency by using up to 4 cache_control blocks
-        if (str(self.model).startswith("claude") or "gemini" in str(self.model)) and len(
-            converted_messages
-        ) > 0:
-            # Strategy: Cache the most valuable messages for maximum savings
-            # 1. System message (always first priority)
-            # 2. Long user messages (high token count)
-            # 3. Assistant messages with tool calls (complex context)
-            # 4. Recent context (last message)
-
-            cache_candidates = []
-
-            # Always cache system message if present
-            for i, msg in enumerate(converted_messages):
-                if msg.get("role") == "system":
-                    cache_candidates.append((i, len(str(msg.get("content", ""))), "system"))
-                    break
-
-            # Find long user messages and assistant messages with tool calls
-            for i, msg in enumerate(converted_messages):
-                content_len = len(str(msg.get("content", "")))
-                role = msg.get("role")
-
-                if role == "user" and content_len > 500:  # Long user messages
-                    cache_candidates.append((i, content_len, "user"))
-                elif role == "assistant" and msg.get("tool_calls"):  # Tool calls
-                    cache_candidates.append(
-                        (i, content_len + 200, "assistant_tools")
-                    )  # Bonus for tool calls
-
-            # Always consider the last message for recent context
-            if len(converted_messages) > 1:
-                last_idx = len(converted_messages) - 1
-                last_msg = converted_messages[last_idx]
-                last_content_len = len(str(last_msg.get("content", "")))
-                cache_candidates.append((last_idx, last_content_len, "recent"))
-
-            # Sort by value (content length) and select top 4 unique indices
-            cache_candidates.sort(key=lambda x: x[1], reverse=True)
-            selected_indices = []
-            for idx, _, msg_type in cache_candidates:
-                if idx not in selected_indices:
-                    selected_indices.append(idx)
-                    if len(selected_indices) >= 4:  # Max 4 cache blocks
-                        break
-
-            # Apply cache_control to selected messages
-            for idx in selected_indices:
-                msg_copy = converted_messages[idx].copy()
-                msg_copy["cache_control"] = {"type": "ephemeral"}
-                converted_messages[idx] = msg_copy
-        if tracing.include_data():
-            span.span_data.input = converted_messages
+            else:
+                # System message already exists, append shared context to it
+                from cai.sdk.agents.simple_agent_manager import AGENT_MANAGER
+                shared_context = AGENT_MANAGER.get_shared_context_injection()
+                
+                if shared_context:
+                    for msg in converted_messages:
+                        if msg.get("role") == "system":
+                            msg["content"] = str(msg.get("content", "")) + shared_context
+                            break
 
         # IMPORTANT: Always sanitize the message list to prevent tool call errors
         # This is critical to fix common errors with tool/assistant sequences
+        # Must happen BEFORE applying cache_control
         try:
             from cai.util import fix_message_list
 
@@ -2644,6 +3234,215 @@ class OpenAIChatCompletionsModel(Model):
                 logger.debug(f"Message list was fixed: {prev_length} -> {new_length} messages")
         except Exception:
             pass
+
+        # Add support for prompt caching for claude (not automatically applied)
+        # Gemini supports it too
+        # https://www.anthropic.com/news/token-saving-updates
+        # Maximize cache efficiency by using up to 4 cache_control blocks
+        # IMPORTANT: Apply cache_control AFTER fix_message_list() to ensure it's preserved
+        # Note: Use "claude" in string to support both direct and openrouter/anthropic/claude models
+        model_str = str(self.model).lower()
+        if ("claude" in model_str or "gemini" in model_str) and len(
+            converted_messages
+        ) > 0:
+            # Debug: Show messages BEFORE normalization
+            if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+                print(f"[CACHE-DEBUG] BEFORE normalization: {len(converted_messages)} messages")
+                # Compute pre-normalization hashes to see if messages change during normalization
+                for i, msg in enumerate(converted_messages[:5]):  # Show first 5 only
+                    role = msg.get("role", "?")
+                    content = msg.get("content")
+                    content_type = type(content).__name__
+                    has_cc = False
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and "cache_control" in block:
+                                has_cc = True
+                                break
+                    elif isinstance(content, dict) and "cache_control" in content:
+                        has_cc = True
+                    cc_note = " (has cache_control)" if has_cc else ""
+                    pre_hash = hashlib.md5(json.dumps(msg, sort_keys=True, default=str).encode()).hexdigest()[:8]
+                    print(f"  [PRE-{i}] {role}: content={content_type}{cc_note} hash={pre_hash}")
+            # STEP 1: Normalize messages for consistent structure
+            # This is CRITICAL for cache matching - the content structure must be identical
+            # between turns for Anthropic to recognize the prefix and read from cache.
+            #
+            # IMPORTANT: Normalize ALL messages to block format for cache_control support
+            # The proxy converts to Anthropic format anyway, so block format works for all roles.
+            # - system/user/assistant/tool: All use block format [{"type": "text", "text": "..."}]
+            # - assistant with tool_calls: Content can be None, tool_calls is separate
+            for msg in converted_messages:
+                role = msg.get("role")
+                content = msg.get("content")
+
+                # Skip messages without content (e.g., assistant with only tool_calls)
+                if content is None:
+                    continue
+
+                # Normalize ALL messages to block format (including tool messages)
+                # This allows us to add cache_control to any message
+                if isinstance(content, str):
+                    msg["content"] = [{"type": "text", "text": content}]
+                elif isinstance(content, list):
+                    normalized = []
+                    for block in content:
+                        if isinstance(block, str):
+                            normalized.append({"type": "text", "text": block})
+                        elif isinstance(block, dict):
+                            # Remove any existing cache_control - we'll add fresh ones
+                            block_copy = {k: v for k, v in block.items() if k != "cache_control"}
+                            normalized.append(block_copy)
+                        else:
+                            normalized.append(block)
+                    msg["content"] = normalized
+
+                # Remove message-level cache_control
+                if "cache_control" in msg:
+                    del msg["cache_control"]
+
+            # STEP 2: Determine cache breakpoints
+            # Anthropic's recommended caching strategy for multi-turn conversations:
+            # 1. ALWAYS mark the LAST message with cache_control - this caches the ENTIRE
+            #    conversation prefix (system + all messages including tool_use/tool_results)
+            # 2. Optionally mark system message for when cache expires and needs rebuilding
+            #
+            # From Anthropic docs: "During each turn, we mark the final block of the final
+            # message with cache_control so the conversation can be incrementally cached."
+            #
+            # IMPORTANT: Not all messages can have cache_control in OpenAI format:
+            # - tool messages have string content (no block format)
+            # - assistant with only tool_calls has None content
+            # For these, we find the nearest cacheable message before them.
+
+            def can_have_cache_control(msg):
+                """Check if a message can have cache_control applied."""
+                role = msg.get("role")
+                content = msg.get("content")
+                # Tool messages now use block format, so they CAN have cache_control
+                # (They were normalized to block format above)
+                # Assistant with only tool_calls - no content to add cache_control
+                if content is None and msg.get("tool_calls"):
+                    return False
+                # Must have list content (normalized block format)
+                if isinstance(content, list) and content:
+                    return True
+                return False
+
+            cache_indices = []
+
+            # 1. Find and mark system message (for cache rebuild after expiry)
+            for i, msg in enumerate(converted_messages):
+                if msg.get("role") == "system":
+                    cache_indices.append(i)
+                    break
+
+            # 2. Find the last CACHEABLE message for incremental caching
+            # Start from the end and go back until we find a message that can have cache_control
+            last_cacheable_idx = None
+            for i in range(len(converted_messages) - 1, -1, -1):
+                if can_have_cache_control(converted_messages[i]):
+                    last_cacheable_idx = i
+                    break
+
+            if last_cacheable_idx is not None and last_cacheable_idx not in cache_indices:
+                cache_indices.append(last_cacheable_idx)
+
+            # STEP 3: Apply cache_control ONLY to breakpoint messages
+            for idx in cache_indices:
+                msg = converted_messages[idx]
+                content = msg.get("content")
+                # For list content (normalized block format), add to last block
+                if isinstance(content, list) and content:
+                    last_block = content[-1]
+                    if isinstance(last_block, dict):
+                        last_block["cache_control"] = {"type": "ephemeral"}
+
+            # Debug: Show cache_control was applied
+            if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+                global _PREVIOUS_TURN_MSG_HASHES
+                print(f"[CACHE-DEBUG] Applied cache_control to indices: {cache_indices}, total messages: {len(converted_messages)}")
+
+                # Collect hashes for this turn
+                current_turn_hashes = []
+
+                # Show message structure with hashes for cache debugging
+                # Hash helps identify which messages change between turns
+                for i, msg in enumerate(converted_messages):
+                    role = msg.get("role", "?")
+                    content = msg.get("content")
+                    has_tc = "tool_calls" in msg
+                    tool_id = msg.get("tool_call_id", "")[:8] if msg.get("tool_call_id") else ""
+
+                    # Compute hash of message content (excluding cache_control for comparison)
+                    msg_for_hash = msg.copy()
+                    if isinstance(msg_for_hash.get("content"), list):
+                        # Remove cache_control from blocks for hashing
+                        clean_content = []
+                        for block in msg_for_hash["content"]:
+                            if isinstance(block, dict):
+                                clean_block = {k: v for k, v in block.items() if k != "cache_control"}
+                                clean_content.append(clean_block)
+                            else:
+                                clean_content.append(block)
+                        msg_for_hash["content"] = clean_content
+                    msg_hash = hashlib.md5(json.dumps(msg_for_hash, sort_keys=True, default=str).encode()).hexdigest()[:8]
+                    current_turn_hashes.append(msg_hash)
+
+                    # Check if this message matches the same position in previous turn
+                    match_marker = ""
+                    if i < len(_PREVIOUS_TURN_MSG_HASHES):
+                        if _PREVIOUS_TURN_MSG_HASHES[i] == msg_hash:
+                            match_marker = " ✓MATCH"
+                        else:
+                            match_marker = f" ✗CHANGED (was {_PREVIOUS_TURN_MSG_HASHES[i]})"
+
+                    if isinstance(content, list) and content:
+                        last_block = content[-1]
+                        has_cc = isinstance(last_block, dict) and "cache_control" in last_block
+                        cc_marker = " ✓CC" if has_cc else ""
+                        # Show first text content preview
+                        text_preview = ""
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                text = block.get("text", "")[:40].replace('\n', ' ')
+                                text_preview = f" '{text}...'" if len(block.get("text", "")) > 40 else f" '{text}'"
+                                break
+                        print(f"  [{i}] {role} [hash:{msg_hash}]: list({len(content)} blocks){cc_marker}{match_marker}{text_preview}")
+                    elif isinstance(content, str):
+                        # String content should not happen after normalization - warn if it does
+                        content_preview = content[:30].replace('\n', ' ') + "..." if len(content) > 30 else content.replace('\n', ' ')
+                        print(f"  [{i}] {role} [hash:{msg_hash}]: string({len(content)} chars) - SHOULD BE LIST!{match_marker} '{content_preview}'")
+                    elif content is None:
+                        tc_info = ""
+                        if has_tc:
+                            tc_list = msg.get("tool_calls", [])
+                            tc_ids = [tc.get("id", "?")[:12] for tc in tc_list]
+                            tc_info = f", tool_calls={len(tc_list)} ids={tc_ids}"
+                        print(f"  [{i}] {role} [hash:{msg_hash}]: None{tc_info}{match_marker}")
+
+                # Summary of matches (before storing new hashes)
+                if len(_PREVIOUS_TURN_MSG_HASHES) > 0:
+                    common_len = min(len(current_turn_hashes), len(_PREVIOUS_TURN_MSG_HASHES))
+                    matches = sum(1 for i in range(common_len) if current_turn_hashes[i] == _PREVIOUS_TURN_MSG_HASHES[i])
+                    print(f"[CACHE-DEBUG] PREFIX MATCH: {matches}/{common_len} messages match previous turn (cache needs prefix match)")
+                    if matches < common_len:
+                        # Find first mismatch for detailed debugging
+                        for i in range(common_len):
+                            if current_turn_hashes[i] != _PREVIOUS_TURN_MSG_HASHES[i]:
+                                print(f"[CACHE-DEBUG] FIRST MISMATCH at index {i}: messages diverge here, cache breaks")
+                                # Print full JSON of mismatched message for debugging
+                                msg = converted_messages[i]
+                                msg_json = json.dumps(msg, indent=2, default=str)[:500]
+                                print(f"[CACHE-DEBUG] Current message[{i}] JSON (truncated):\n{msg_json}")
+                                break
+
+                # Store current turn's hashes for next comparison
+                _PREVIOUS_TURN_MSG_HASHES = current_turn_hashes
+                print(f"[CACHE-DEBUG] Stored {len(current_turn_hashes)} message hashes for next turn comparison")
+
+        if tracing.include_data():
+            span.span_data.input = converted_messages
 
         parallel_tool_calls = (
             True if model_settings.parallel_tool_calls and tools and len(tools) > 0 else NOT_GIVEN
@@ -2699,10 +3498,17 @@ class OpenAIChatCompletionsModel(Model):
         # Determine provider based on model string
         model_str = str(kwargs["model"]).lower()
 
-        if "alias" in model_str and "alias1.5" not in model_str:  # NOTE: exclude alias1.5
-            kwargs["api_base"] = "https://api.aliasrobotics.com:666/"
+        # Gateway base: CSI_CUSTOM_ENDPOINT / ALIAS_API_URL if model qualifies; else OPENAI_API_BASE (see llm_api_base).
+        _model_for_base = str(kwargs.get("model") or os.getenv("CAI_MODEL") or "")
+        _alias_gateway_base = resolve_llm_openai_compatible_base(_model_for_base).rstrip("/")
+        if model_str == "alias2-mini":
+            kwargs["api_base"] = _alias_gateway_base
             kwargs["custom_llm_provider"] = "openai"
-            kwargs["api_key"] = os.getenv("ALIAS_API_KEY", "REDACTED_ALIAS_KEY")
+            kwargs["api_key"] = (get_config().alias_api_key or "sk-alias-1234567890").strip()
+        elif "alias" in model_str and "alias1.5" not in model_str:  # NOTE: exclude alias1.5
+            kwargs["api_base"] = _alias_gateway_base
+            kwargs["custom_llm_provider"] = "openai"
+            kwargs["api_key"] = (get_config().alias_api_key or "sk-alias-1234567890").strip()
         elif "/" in model_str:
             # Handle provider/model format
             provider = model_str.split("/")[0]
@@ -2737,8 +3543,8 @@ class OpenAIChatCompletionsModel(Model):
                 if hasattr(model_settings, "reasoning_effort") and model_settings.reasoning_effort:
                     kwargs["reasoning_effort"] = model_settings.reasoning_effort
                 else:
-                    # Default to "low" reasoning effort if model supports it
-                    kwargs["reasoning_effort"] = "low"
+                    # Default to "high" reasoning effort if model supports it
+                    kwargs["reasoning_effort"] = "high"
             elif provider == "claude" or "claude" in model_str:
                 litellm.drop_params = True
                 kwargs.pop("store", None)
@@ -2784,7 +3590,7 @@ class OpenAIChatCompletionsModel(Model):
 
                     if is_compatible:
                         kwargs["reasoning_effort"] = (
-                            "low"  # Use reasoning_effort instead of thinking
+                            "high"  # Use reasoning_effort instead of thinking
                         )
             elif provider == "gemini":
                 kwargs.pop("parallel_tool_calls", None)
@@ -2826,7 +3632,7 @@ class OpenAIChatCompletionsModel(Model):
 
                     if is_compatible:
                         kwargs["reasoning_effort"] = (
-                            "low"  # Use reasoning_effort instead of thinking
+                            "high"  # Use reasoning_effort instead of thinking
                         )
             elif "gemini" in model_str:
                 kwargs.pop("parallel_tool_calls", None)
@@ -2858,10 +3664,245 @@ class OpenAIChatCompletionsModel(Model):
                 filtered_kwargs[key] = value
         kwargs = filtered_kwargs
 
+        # Abliteration steering: CAI_UNRESTRICTED=true → steering ON + thinking OFF.
+        # `steering_enabled` is an alias-backend-only field. Injecting it into
+        # vanilla Anthropic/OpenAI/OpenRouter requests causes upstream 400s
+        # ("extra_body: Extra inputs are not permitted") which LiteLLM
+        # misclassifies as InternalServerError → silent retry-loop hang.
+        # Gate steering payload on Alias-backed models only. CAI_UNRESTRICTED must not
+        # inject extra_body for Azure/OpenAI/Anthropic — upstream rejects it and LiteLLM
+        # may retry (see comment above).
+        _unrestricted = os.getenv("CAI_UNRESTRICTED", "false").strip().lower() in ("true", "1", "yes")
+        if self._is_alias_model:
+            kwargs.setdefault("extra_body", {})
+            kwargs["extra_body"]["steering_enabled"] = _unrestricted
+            if _unrestricted:
+                kwargs["extra_body"]["chat_template_kwargs"] = {"enable_thinking": False}
+
+        global _UNRESTRICTED_EXTRA_BODY_LOGGED
+        if _unrestricted and not _UNRESTRICTED_EXTRA_BODY_LOGGED:
+            if os.getenv("CAI_UNRESTRICTED_LOG", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                _UNRESTRICTED_EXTRA_BODY_LOGGED = True
+                print(
+                    "[CAI] Unrestricted: client will send extra_body="
+                    f"{kwargs.get('extra_body')!r} (steering_enabled / chat_template_kwargs). "
+                    "If the model behaves like the normal route, LiteLLM or the backend may be ignoring these fields.",
+                    file=sys.stderr,
+                )
+
         # Add retry logic for rate limits
         max_retries = 3
         retry_count = 0
-        
+
+        # Use httpx directly when a custom base is configured and messages carry cache_control
+        # (LiteLLM strips cache_control from messages when using the OpenAI client).
+        _model_for_openai_base = str(kwargs.get("model") or os.getenv("CAI_MODEL") or "")
+        openai_api_base = (
+            kwargs.get("api_base") or resolve_llm_openai_compatible_base(_model_for_openai_base)
+        ).rstrip("/")
+
+        def has_cache_control(messages):
+            """Check if any message has cache_control (at message level or in content blocks)"""
+            for msg in messages:
+                # Check message-level cache_control
+                if msg.get("cache_control"):
+                    return True
+                # Check content blocks for cache_control
+                content = msg.get("content")
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("cache_control"):
+                            return True
+            return False
+
+        use_direct_request = explicit_custom_llm_api_base_configured(
+            _model_for_openai_base
+        ) and has_cache_control(kwargs.get("messages", []))
+
+        # Debug: Show whether direct HTTP path is being used
+        if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+            has_cc = has_cache_control(kwargs.get("messages", []))
+            print(
+                f"[CACHE-DEBUG] api_base={openai_api_base}, has_cache_control={has_cc}, "
+                f"use_direct={use_direct_request}, stream={stream}"
+            )
+
+        if use_direct_request:
+            logger.debug(f"[CACHE] Using direct HTTP path to preserve cache_control (stream={stream})")
+            try:
+                import httpx
+
+                # Build the request body preserving all fields including cache_control
+                request_body = {
+                    "model": kwargs.get("model", self.model),
+                    "messages": kwargs.get("messages", []),
+                    "max_tokens": kwargs.get("max_tokens"),
+                    "temperature": kwargs.get("temperature"),
+                    "top_p": kwargs.get("top_p"),
+                    "stream": stream,  # Match the requested stream mode
+                }
+
+                # Add tools if present
+                if kwargs.get("tools") and kwargs["tools"] is not NOT_GIVEN:
+                    request_body["tools"] = kwargs["tools"]
+
+                # Add tool_choice if present
+                if kwargs.get("tool_choice") and kwargs["tool_choice"] is not NOT_GIVEN:
+                    request_body["tool_choice"] = kwargs["tool_choice"]
+
+                # Propagate extra_body fields (steering_enabled, chat_template_kwargs, etc.)
+                for eb_key, eb_val in kwargs.get("extra_body", {}).items():
+                    request_body[eb_key] = eb_val
+
+                # Remove None values
+                request_body = {k: v for k, v in request_body.items() if v is not None}
+
+                api_url = f"{openai_api_base.rstrip('/')}/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {get_config().openai_api_key or 'sk-placeholder'}",
+                }
+
+                if stream:
+                    # Streaming mode: Return an async generator for SSE chunks
+                    # We need to create an httpx client that stays open during streaming
+                    client = httpx.AsyncClient(timeout=120.0)
+
+                    async def stream_response():
+                        """Async generator that yields SSE chunks from the proxy"""
+                        try:
+                            async with client.stream("POST", api_url, json=request_body, headers=headers) as resp:
+                                resp.raise_for_status()
+                                buffer = ""
+                                async for chunk in resp.aiter_text():
+                                    buffer += chunk
+                                    while "\n" in buffer:
+                                        line, buffer = buffer.split("\n", 1)
+                                        line = line.strip()
+                                        if line.startswith("data: "):
+                                            data_str = line[6:]
+                                            if data_str == "[DONE]":
+                                                return
+                                            try:
+                                                data = json.loads(data_str)
+                                                # Yield the parsed chunk as a ModelResponse-like object
+                                                from litellm import ModelResponse
+                                                from litellm.types.utils import StreamingChoices, Delta
+
+                                                delta_data = data.get("choices", [{}])[0].get("delta", {})
+                                                delta = Delta(
+                                                    role=delta_data.get("role"),
+                                                    content=delta_data.get("content"),
+                                                    tool_calls=delta_data.get("tool_calls")
+                                                )
+
+                                                choices = [StreamingChoices(
+                                                    index=0,
+                                                    delta=delta,
+                                                    finish_reason=data.get("choices", [{}])[0].get("finish_reason")
+                                                )]
+
+                                                # Extract usage if present (usually in final chunk)
+                                                usage_data = data.get("usage")
+                                                usage = None
+                                                if usage_data:
+                                                    # Extract cache metrics - support both Anthropic and OpenAI formats
+                                                    cache_read = usage_data.get("cache_read_input_tokens")
+                                                    cache_creation = usage_data.get("cache_creation_input_tokens")
+                                                    # Fallback to OpenAI format (prompt_tokens_details.cached_tokens)
+                                                    if not cache_read:
+                                                        prompt_details = usage_data.get("prompt_tokens_details", {})
+                                                        if prompt_details:
+                                                            cache_read = prompt_details.get("cached_tokens")
+
+                                                    # Debug: Log cache metrics from streaming
+                                                    if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+                                                        print(f"[CACHE-DEBUG] Direct HTTP streaming usage: CR={cache_read}, CW={cache_creation}")
+
+                                                    from litellm.types.utils import Usage
+                                                    usage = Usage(
+                                                        prompt_tokens=usage_data.get("prompt_tokens", 0),
+                                                        completion_tokens=usage_data.get("completion_tokens", 0),
+                                                        total_tokens=usage_data.get("total_tokens", 0),
+                                                        cache_creation_input_tokens=cache_creation,
+                                                        cache_read_input_tokens=cache_read,
+                                                    )
+
+                                                chunk_response = ModelResponse(
+                                                    id=data.get("id", "chatcmpl-proxy"),
+                                                    created=data.get("created", int(time.time())),
+                                                    model=data.get("model", str(self.model)),
+                                                    choices=choices,
+                                                    usage=usage,
+                                                    object="chat.completion.chunk"
+                                                )
+                                                yield chunk_response
+                                            except json.JSONDecodeError:
+                                                continue
+                        finally:
+                            await client.aclose()
+
+                    # Return Response object and stream generator (similar to LiteLLM streaming)
+                    response_obj = Response(
+                        id=FAKE_RESPONSES_ID,
+                        created_at=time.time(),
+                        model=self.model,
+                        object="response",
+                        output=[],
+                        tool_choice="auto"
+                        if tool_choice is None or tool_choice == NOT_GIVEN
+                        else cast(Literal["auto", "required", "none"], tool_choice),
+                        top_p=model_settings.top_p,
+                        temperature=model_settings.temperature,
+                        tools=[],
+                        parallel_tool_calls=parallel_tool_calls or False,
+                    )
+                    return response_obj, stream_response()
+
+                else:
+                    # Non-streaming mode
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        response = await client.post(api_url, json=request_body, headers=headers)
+                        response.raise_for_status()
+                        data = response.json()
+
+                        usage_data = data.get("usage", {})
+
+                        # Extract cache metrics - support both Anthropic and OpenAI formats
+                        cache_read = usage_data.get("cache_read_input_tokens")
+                        cache_creation = usage_data.get("cache_creation_input_tokens")
+                        # Fallback to OpenAI format (prompt_tokens_details.cached_tokens)
+                        if not cache_read:
+                            prompt_details = usage_data.get("prompt_tokens_details", {})
+                            if prompt_details:
+                                cache_read = prompt_details.get("cached_tokens")
+
+                        # Debug: Log what the proxy returned
+                        if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+                            print(f"[CACHE-DEBUG] Direct HTTP non-streaming usage from proxy: CR={cache_read}, CW={cache_creation}, full_usage={usage_data}")
+
+                        # Use litellm's ModelResponse which handles the structure automatically
+                        from litellm import ModelResponse
+                        result = ModelResponse(**data)
+
+                        # Ensure cache metrics are preserved in usage
+                        if result.usage:
+                            result.usage.cache_creation_input_tokens = cache_creation
+                            result.usage.cache_read_input_tokens = cache_read
+
+                        return result
+
+            except Exception as e:
+                # Fall back to LiteLLM if direct request fails
+                if os.getenv("CAI_SHOW_CACHE", "").lower() in ("true", "1", "yes"):
+                    print(f"[CACHE-DEBUG] Direct HTTP path FAILED, falling back to LiteLLM: {e}")
+                logger.debug(f"Direct request failed, falling back to LiteLLM: {e}")
+
         # Check if this is Ollama Cloud (ollama_cloud/ prefix)
         # Ollama Cloud is OpenAI-compatible, so we bypass LiteLLM to avoid parsing issues
         is_ollama_cloud = "ollama_cloud/" in model_str
@@ -2909,7 +3950,13 @@ class OpenAIChatCompletionsModel(Model):
         
         while retry_count < max_retries:
             try:
-                if self.is_ollama:
+                cfg = get_config()
+                if (self._is_alias_model or cfg.force_httpx) and not self.is_ollama:
+                    # [N] Direct httpx — bypass LiteLLM for alias/forced models
+                    return await self._direct_httpx_completion(
+                        kwargs, model_settings, tool_choice, stream, parallel_tool_calls
+                    )
+                elif self.is_ollama:
                     return await self._fetch_response_litellm_ollama(
                         kwargs, model_settings, tool_choice, stream, parallel_tool_calls
                     )
@@ -2917,55 +3964,132 @@ class OpenAIChatCompletionsModel(Model):
                     return await self._fetch_response_litellm_openai(
                         kwargs, model_settings, tool_choice, stream, parallel_tool_calls
                     )
-            except litellm.exceptions.RateLimitError as e:
+            except (litellm.exceptions.RateLimitError, LLMRateLimited) as e:
                 retry_count += 1
                 if retry_count >= max_retries:
-                    print(f"\n❌ Rate limit exceeded after {max_retries} retries")
+                    self.logger.error(f"Rate limit exceeded after {max_retries} retries")
+                    if verbose_http_retries():
+                        print(f"\n❌ Rate limit exceeded after {max_retries} retries")
                     raise
-                
-                print(f"\n⏳ Rate limit reached - Too many requests (attempt {retry_count}/{max_retries})")
-                # Try to extract retry delay from error response or use default
-                retry_delay = 60  # Default delay in seconds
-                try:
-                    # Extract the JSON part from the error message
-                    json_str = str(e.message).split("VertexAIException - ")[-1]
-                    error_details = json.loads(json_str)
 
-                    retry_info = next(
-                        (
-                            detail
-                            for detail in error_details.get("error", {}).get("details", [])
-                            if detail.get("@type") == "type.googleapis.com/google.rpc.RetryInfo"
-                        ),
-                        None,
-                    )
-                    if retry_info and "retryDelay" in retry_info:
-                        retry_delay = int(retry_info["retryDelay"].rstrip("s"))
-                except Exception:
-                    # Try other common formats
-                    import re
-                    error_str = str(e)
-                    
-                    # Look for "Retry-After" header or similar patterns
-                    retry_match = re.search(r'retry[_-]?after[:\s]+(\d+)', error_str, re.IGNORECASE)
-                    if retry_match:
-                        retry_delay = int(retry_match.group(1))
-                    # Look for "wait X seconds" patterns
-                    elif wait_match := re.search(r'wait\s+(\d+)\s+seconds?', error_str, re.IGNORECASE):
-                        retry_delay = int(wait_match.group(1))
-                    # Look for explicit retry delay mentions
-                    elif delay_match := re.search(r'retry\s+in\s+(\d+)\s+seconds?', error_str, re.IGNORECASE):
-                        retry_delay = int(delay_match.group(1))
+                self.logger.warning(
+                    f"Rate limit retry {retry_count}/{max_retries}: {str(e)[:200]}"
+                )
+                if verbose_http_retries():
+                    print(f"\n⏳ Rate limit reached - Too many requests (attempt {retry_count}/{max_retries})")
+                # Extract retry delay: check LLMRateLimited.retry_after, VertexAI
+                # JSON details, common header patterns, or fall back to exp backoff
+                retry_delay: float | None = None
 
-                # Use exponential backoff with jitter if no explicit delay found
-                if retry_count > 1 and retry_delay == 60:
-                    import random
-                    retry_delay = min(300, retry_delay * retry_count) + random.randint(0, 10)
-                
-                print(f"💤 Waiting {retry_delay}s before retry... (Rate limit protection)")
-                await asyncio.sleep(retry_delay)  # Use async sleep instead of time.sleep
+                # Check if LLMRateLimited carries an explicit retry_after
+                if isinstance(e, LLMRateLimited) and getattr(e, "retry_after", None):
+                    retry_delay = float(e.retry_after)
+                else:
+                    try:
+                        # VertexAI format: parse RetryInfo from JSON details
+                        error_msg = str(e.args[0]) if e.args else str(e)
+                        json_str = error_msg.split("VertexAIException - ")[-1]
+                        error_details = json.loads(json_str)
+                        retry_info = next(
+                            (d for d in error_details.get("error", {}).get("details", [])
+                             if d.get("@type") == "type.googleapis.com/google.rpc.RetryInfo"),
+                            None,
+                        )
+                        if retry_info and "retryDelay" in retry_info:
+                            retry_delay = float(retry_info["retryDelay"].rstrip("s"))
+                    except Exception:
+                        # Try common retry-after patterns in error message
+                        error_str = str(e)
+                        for pattern in [
+                            r'retry[_-]?after[:\s]+(\d+)',
+                            r'wait\s+(\d+)\s+seconds?',
+                            r'retry\s+in\s+(\d+)\s+seconds?',
+                        ]:
+                            m = re.search(pattern, error_str, re.IGNORECASE)
+                            if m:
+                                retry_delay = float(m.group(1))
+                                break
+
+                # Exponential backoff with jitter if no explicit delay
+                if retry_delay is None:
+                    retry_delay = self._backoff_delay(retry_count - 1)
+
+                if verbose_http_retries():
+                    print(f"💤 Waiting {retry_delay:.0f}s before retry... (Rate limit protection)")
+                await sleep_with_retry_backoff_hint(retry_delay)
+                continue
+
+            except litellm.exceptions.ServiceUnavailableError as e:
+                # Handle 503 "queue is full" errors from the LiteLLM proxy server
+                retry_count += 1
+                if retry_count >= max_retries:
+                    self.logger.error(f"Service unavailable after {max_retries} retries")
+                    if verbose_http_retries():
+                        print(f"\n❌ Service unavailable after {max_retries} retries")
+                    raise
+
+                error_msg = str(e)
+                self.logger.warning(
+                    f"Service unavailable retry {retry_count}/{max_retries}: {error_msg[:200]}"
+                )
+                if verbose_http_retries():
+                    if "queue is full" in error_msg.lower():
+                        print(f"\n⏳ Server queue is full (attempt {retry_count}/{max_retries})")
+                    else:
+                        print(f"\n⏳ Service unavailable: {error_msg[:100]} (attempt {retry_count}/{max_retries})")
+
+                # Exponential backoff with jitter for 503 errors
+                retry_delay = self._backoff_delay(retry_count - 1, base=10.0, cap=120.0)
+
+                if verbose_http_retries():
+                    print(f"💤 Waiting {retry_delay}s before retry... (Server overload protection)")
+                await sleep_with_retry_backoff_hint(retry_delay)
                 continue  # Retry the request
-                
+
+            except litellm.exceptions.BadGatewayError as e:
+                # Handle 502 Bad Gateway errors (e.g. nginx proxy to litellm)
+                retry_count += 1
+                if retry_count >= max_retries:
+                    self.logger.error(
+                        f"Bad Gateway (502) after {max_retries} retries [{self.model}]"
+                    )
+                    if verbose_http_retries():
+                        print(f"\n❌ Bad Gateway (502) after {max_retries} retries [{self.model}]")
+                    raise
+
+                error_msg = str(e)[:150]
+                self.logger.warning(
+                    f"Bad Gateway retry {retry_count}/{max_retries}: {error_msg}"
+                )
+                if verbose_http_retries():
+                    print(f"\n⏳ Bad Gateway (502): {error_msg} (attempt {retry_count}/{max_retries})")
+
+                import random
+                base_delay = 10
+                retry_delay = min(120, base_delay * (2 ** (retry_count - 1))) + random.randint(0, 5)
+
+                if verbose_http_retries():
+                    print(f"💤 Waiting {retry_delay}s before retry... (Backend unavailable)")
+                await sleep_with_retry_backoff_hint(retry_delay)
+                continue
+
+            except litellm.exceptions.APIConnectionError as e:
+                self.logger.warning(f"API connection error [{self.model}]: {e}")
+                if verbose_http_retries():
+                    print(f"\n🌐 Connection Error [{self.model}]: {str(e)}")
+                    print("💡 Check your internet connection or API endpoint")
+                raise
+
+            except (litellm.exceptions.Timeout, LLMTimeout) as e:
+                self.logger.warning(f"Request timed out [{self.model}]: {e}")
+                if verbose_http_retries():
+                    print(f"\n⏱️  Request timed out [{self.model}]: {str(e)}")
+                    print("💡 The model took too long to respond. Try:")
+                    print("  • Using a faster model")
+                    print("  • Reducing the prompt size")
+                    print("  • Checking your internet connection")
+                raise
+
             except litellm.exceptions.BadRequestError as e:
                 error_msg = str(e)
 
@@ -3083,8 +4207,8 @@ class OpenAIChatCompletionsModel(Model):
                             ):
                                 provider_kwargs["reasoning_effort"] = model_settings.reasoning_effort
                             else:
-                                # Default to "low" reasoning effort
-                                provider_kwargs["reasoning_effort"] = "low"
+                                # Default to "high" reasoning effort
+                                provider_kwargs["reasoning_effort"] = "high"
                         elif provider == "claude" or "claude" in model_str:
                             provider_kwargs["custom_llm_provider"] = "anthropic"
                             provider_kwargs.pop("store", None)  # Claude doesn't support store parameter
@@ -3115,7 +4239,7 @@ class OpenAIChatCompletionsModel(Model):
 
                                 if is_compatible:
                                     provider_kwargs["reasoning_effort"] = (
-                                        "low"  # Use reasoning_effort instead of thinking
+                                        "high"  # Use reasoning_effort instead of thinking
                                     )
                         elif provider == "gemini":
                             provider_kwargs["custom_llm_provider"] = "gemini"
@@ -3251,7 +4375,8 @@ class OpenAIChatCompletionsModel(Model):
                     print("\n📦 Context window exceeded - Message history too long")
                     
                     # Try to extract token info from different error formats
-                    import re
+                    # NOTE: re is imported at module level — do NOT re-import here
+                    # as it causes UnboundLocalError for earlier uses in this scope
                     error_str = str(e)
                     
                     # Pattern 1: "X tokens > Y maximum" (Anthropic)
@@ -3278,6 +4403,38 @@ class OpenAIChatCompletionsModel(Model):
                         # Get model's max tokens
                         model_max = self._get_model_max_tokens(str(self.model))
                         print(f"🎯 Model limit: {model_max:,} tokens")
+
+                    # Best-effort recovery: pin the provider limit (when available) and compact+retry once.
+                    # Keeps a hard 80% safety cap when estimates are high; avoids stuck jobs when
+                    # pricing heuristics overestimate the true context window (e.g. alias models).
+                    try:
+                        inferred_max = locals().get("max_tokens", None)
+                        inferred_used = locals().get("used_tokens", None)
+                        if isinstance(inferred_max, int) and inferred_max > 0:
+                            os.environ["CAI_MODEL_MAX_INPUT_TOKENS"] = str(inferred_max)
+                        if not getattr(self, "_context_compact_retry", False):
+                            self._context_compact_retry = True
+                            # Force compaction attempt (estimated_tokens must exceed threshold).
+                            force_est = int(inferred_used or inferred_max or estimated_input_tokens or 0)
+                            force_est = max(force_est, 1)
+                            _in = input
+                            _sys = system_instructions
+                            _in, _sys, compacted = await self._auto_compact_if_needed(
+                                force_est,
+                                _in,
+                                _sys,
+                            )
+                            if compacted:
+                                rebuilt = self._messages_for_token_count_after_history_mutation(
+                                    system_instructions=_sys,
+                                    input=_in,
+                                )
+                                kwargs["messages"] = rebuilt
+                                return await self._fetch_response_litellm_openai(
+                                    kwargs, model_settings, tool_choice, stream, parallel_tool_calls
+                                )
+                    except Exception:
+                        pass
                     
                     print("\n💡 Quick fixes:")
                     print("  • /flush - Clear conversation history")
@@ -3288,6 +4445,28 @@ class OpenAIChatCompletionsModel(Model):
             else:
                 raise e
 
+    # ------------------------------------------------------------------
+    # Direct httpx completion — bypasses LiteLLM for alias models [N]
+    # ------------------------------------------------------------------
+    async def _direct_httpx_completion(
+        self,
+        kwargs: dict,
+        model_settings: ModelSettings,
+        tool_choice: ChatCompletionToolChoiceOptionParam | NotGiven,
+        stream: bool,
+        parallel_tool_calls: bool,
+    ):
+        """Delegate to chatcompletions.httpx_client.direct_httpx_completion."""
+        return await _direct_httpx_completion_impl(
+            kwargs=kwargs,
+            model_settings=model_settings,
+            tool_choice=tool_choice,
+            stream=stream,
+            parallel_tool_calls=parallel_tool_calls,
+            model_name=str(self.model),
+            user_agent=_USER_AGENT,
+        )
+
     async def _fetch_response_litellm_openai(
         self,
         kwargs: dict,
@@ -3296,91 +4475,15 @@ class OpenAIChatCompletionsModel(Model):
         stream: bool,
         parallel_tool_calls: bool,
     ) -> ChatCompletion | tuple[Response, AsyncStream[ChatCompletionChunk]]:
-        """
-        Handle standard LiteLLM API calls for OpenAI and compatible models.
-        If a ContextWindowExceededError occurs due to a tool_call id being
-        too long, truncate all tool_call ids in the messages to 40 characters
-        and retry once silently.
-        """
-        try:
-            if stream:
-                # Standard LiteLLM handling for streaming
-                ret = await litellm.acompletion(**kwargs)
-                stream_obj = await litellm.acompletion(**kwargs)
-
-                response = Response(
-                    id=FAKE_RESPONSES_ID,
-                    created_at=time.time(),
-                    model=self.model,
-                    object="response",
-                    output=[],
-                    tool_choice="auto"
-                    if tool_choice is None or tool_choice == NOT_GIVEN
-                    else cast(Literal["auto", "required", "none"], tool_choice),
-                    top_p=model_settings.top_p,
-                    temperature=model_settings.temperature,
-                    tools=[],
-                    parallel_tool_calls=parallel_tool_calls or False,
-                )
-                return response, stream_obj
-            else:
-                # Standard OpenAI handling for non-streaming
-                ret = await litellm.acompletion(**kwargs)
-                return ret
-        except Exception as e:
-            error_msg = str(e)
-            # Handle both OpenAI and Anthropic error messages for tool_call_id
-            if (
-                "string too long" in error_msg
-                or "Invalid 'messages" in error_msg
-                and "tool_call_id" in error_msg
-                and "maximum length" in error_msg
-            ):
-                # Truncate all tool_call ids in all messages to 40 characters
-                messages = kwargs.get("messages", [])
-                for msg in messages:
-                    # Truncate tool_call_id in the message itself if present
-                    if (
-                        "tool_call_id" in msg
-                        and isinstance(msg["tool_call_id"], str)
-                        and len(msg["tool_call_id"]) > 40
-                    ):
-                        msg["tool_call_id"] = msg["tool_call_id"][:40]
-                    # Truncate tool_call ids in tool_calls if present
-                    if "tool_calls" in msg and isinstance(msg["tool_calls"], list):
-                        for tool_call in msg["tool_calls"]:
-                            if (
-                                isinstance(tool_call, dict)
-                                and "id" in tool_call
-                                and isinstance(tool_call["id"], str)
-                                and len(tool_call["id"]) > 40
-                            ):
-                                tool_call["id"] = tool_call["id"][:40]
-                kwargs["messages"] = messages
-                # Retry once, silently
-                if stream:
-                    ret = await litellm.acompletion(**kwargs)
-                    stream_obj = await litellm.acompletion(**kwargs)
-                    response = Response(
-                        id=FAKE_RESPONSES_ID,
-                        created_at=time.time(),
-                        model=self.model,
-                        object="response",
-                        output=[],
-                        tool_choice="auto"
-                        if tool_choice is None or tool_choice == NOT_GIVEN
-                        else cast(Literal["auto", "required", "none"], tool_choice),
-                        top_p=model_settings.top_p,
-                        temperature=model_settings.temperature,
-                        tools=[],
-                        parallel_tool_calls=parallel_tool_calls or False,
-                    )
-                    return response, stream_obj
-                else:
-                    ret = await litellm.acompletion(**kwargs)
-                    return ret
-            else:
-                raise
+        """Delegate to chatcompletions.litellm_adapter.fetch_response_litellm_openai."""
+        return await _fetch_litellm_openai_impl(
+            kwargs=kwargs,
+            model_name=str(self.model),
+            model_settings=model_settings,
+            tool_choice=tool_choice,
+            stream=stream,
+            parallel_tool_calls=parallel_tool_calls,
+        )
 
     async def _fetch_response_litellm_ollama(
         self,
@@ -3390,186 +4493,39 @@ class OpenAIChatCompletionsModel(Model):
         stream: bool,
         parallel_tool_calls: bool,
     ) -> ChatCompletion | tuple[Response, AsyncStream[ChatCompletionChunk]]:
-        """
-        Fetches a response from an Ollama or Qwen model using LiteLLM, ensuring
-        that the 'format' parameter is not set to a JSON string, which can cause
-        issues with the Ollama API.
-
-        Args:
-            kwargs (dict): Parameters for the completion request.
-            model_settings (ModelSettings): Model configuration.
-            tool_choice (ChatCompletionToolChoiceOptionParam | NotGiven): Tool choice.
-            stream (bool): Whether to stream the response.
-            parallel_tool_calls (bool): Whether to allow parallel tool calls.
-
-        Returns:
-            ChatCompletion or tuple[Response, AsyncStream[ChatCompletionChunk]]:
-                The completion response or a tuple for streaming.
-        """
-        # Extract only supported parameters for Ollama
-        ollama_supported_params = {
-            "model": kwargs.get("model", ""),
-            "messages": kwargs.get("messages", []),
-            "stream": kwargs.get("stream", False),
-        }
-
-        # Add optional parameters if they exist and are not NOT_GIVEN
-        for param in ["temperature", "top_p", "max_tokens"]:
-            if param in kwargs and kwargs[param] is not NOT_GIVEN:
-                ollama_supported_params[param] = kwargs[param]
-
-        # Add extra headers if available
-        if "extra_headers" in kwargs:
-            ollama_supported_params["extra_headers"] = kwargs["extra_headers"]
-
-        # Add tools for compatibility with Qwen
-        if "tools" in kwargs and kwargs.get("tools") and kwargs.get("tools") is not NOT_GIVEN:
-            ollama_supported_params["tools"] = kwargs.get("tools")
-
-        # Remove None values and filter out unsupported parameters
-        ollama_kwargs = {
-            k: v
-            for k, v in ollama_supported_params.items()
-            if v is not None and k not in ["response_format", "store"]
-        }
-
-        # Check if this is a Qwen model
-        model_str = str(self.model).lower()
-        is_qwen = "qwen" in model_str
-        api_base = get_ollama_api_base()
-
-        if stream:
-            response = Response(
-                id=FAKE_RESPONSES_ID,
-                created_at=time.time(),
-                model=self.model,
-                object="response",
-                output=[],
-                tool_choice="auto"
-                if tool_choice is None or tool_choice == NOT_GIVEN
-                else cast(Literal["auto", "required", "none"], tool_choice),
-                top_p=model_settings.top_p,
-                temperature=model_settings.temperature,
-                tools=[],
-                parallel_tool_calls=parallel_tool_calls or False,
-            )
-            # Get streaming response
-            stream_obj = await litellm.acompletion(
-                **ollama_kwargs, api_base=api_base, custom_llm_provider="openai"
-            )
-            return response, stream_obj
-        else:
-            # Get completion response
-            return await litellm.acompletion(
-                **ollama_kwargs,
-                api_base=api_base,
-                custom_llm_provider="openai",
+        """Delegate to chatcompletions.litellm_adapter.fetch_response_litellm_ollama."""
+        return await _fetch_litellm_ollama_impl(
+            kwargs=kwargs,
+            model_name=str(self.model),
+            model_settings=model_settings,
+            tool_choice=tool_choice,
+            stream=stream,
+            parallel_tool_calls=parallel_tool_calls,
             )
 
     def _get_model_max_tokens(self, model_name: str) -> int:
-        """Get the maximum input tokens for a model from pricing.json or default."""
-        try:
-            import pathlib
-            pricing_path = pathlib.Path("pricing.json")
-            if pricing_path.exists():
-                with open(pricing_path, encoding="utf-8") as f:
-                    pricing_data = json.load(f)
-                    model_info = pricing_data.get(model_name, {})
-                    return model_info.get("max_input_tokens", 200000)
-        except Exception:
-            pass
-        # Default to 200k if not found
-        return 200000
+        """Delegate to chatcompletions.auto_compactor.get_model_max_tokens."""
+        return _get_model_max_tokens_impl(model_name)
 
     async def _auto_compact_if_needed(self, estimated_tokens: int, input: str | list[TResponseInputItem], system_instructions: str | None) -> tuple[str | list[TResponseInputItem], str | None, bool]:
-        """Check if auto-compaction is needed and perform it if necessary.
-        
-        Returns:
-            tuple: (potentially modified input, potentially modified system_instructions, whether compaction occurred)
-        """
-        # Check if auto-compaction is disabled
-        if os.getenv("CAI_AUTO_COMPACT", "true").lower() == "false":
-            return input, system_instructions, False
-            
-        max_tokens = self._get_model_max_tokens(str(self.model))
-        threshold_percent = float(os.getenv("CAI_AUTO_COMPACT_THRESHOLD", "0.8"))
-        threshold = max_tokens * threshold_percent
-        
-        if estimated_tokens <= threshold:
-            return input, system_instructions, False
-            
-        # Auto-compaction needed
-        from rich.console import Console
-        console = Console()
-        
-        # Update context usage in environment for toolbar
-        context_usage = estimated_tokens / max_tokens
-        os.environ['CAI_CONTEXT_USAGE'] = str(context_usage)
-        
-        console.print(f"\n[yellow]⚠️  Context usage at {(estimated_tokens/max_tokens)*100:.1f}% ({estimated_tokens:,}/{max_tokens:,} tokens)[/yellow]")
-        console.print("[yellow]Triggering automatic context compaction...[/yellow]\n")
-        
-        # Import compact command components
-        try:
-            from cai.repl.commands.memory import MEMORY_COMMAND_INSTANCE
-            
-            # Generate AI summary of the conversation
-            summary = await MEMORY_COMMAND_INSTANCE._ai_summarize_history(self.agent_name)
-            
-            if summary:
-                # Store the summary
-                from cai.repl.commands.memory import COMPACTED_SUMMARIES
-                COMPACTED_SUMMARIES[self.agent_name] = summary
-                
-                # Clear the message history and keep only essential messages
-                self.message_history.clear()
-                # Reset context usage after clearing
-                os.environ['CAI_CONTEXT_USAGE'] = '0.0'
-                
-                # Reset context usage since we cleared history
-                os.environ['CAI_CONTEXT_USAGE'] = '0.0'
-                
-                # Create new input with summary
-                new_system_instructions = system_instructions or ""
-                if new_system_instructions:
-                    new_system_instructions += "\n\n"
-                new_system_instructions += f"Previous conversation summary:\n{summary}"
-                
-                # Keep only the current input (user's latest message)
-                if isinstance(input, str):
-                    new_input = input
-                else:
-                    # For list input, keep only user messages
-                    new_input = []
-                    for item in input:
-                        if hasattr(item, 'role') and item.role == 'user':
-                            new_input.append(item)
-                        elif isinstance(item, dict) and item.get('role') == 'user':
-                            new_input.append(item)
-                    
-                    # If no user messages found, keep the original input
-                    if not new_input:
-                        new_input = input
-                
-                # Re-estimate tokens with compacted context
-                test_messages = self._converter.items_to_messages(new_input, model_instance=self)
-                if new_system_instructions:
-                    test_messages.insert(0, {"role": "system", "content": new_system_instructions})
-                new_tokens, _ = count_tokens_with_tiktoken(test_messages)
-                
-                console.print(f"[green]✓ Context compacted: {estimated_tokens:,} → {new_tokens:,} tokens ({(1-new_tokens/estimated_tokens)*100:.1f}% reduction)[/green]\n")
-                
-                # Update context usage after compaction
-                new_context_usage = new_tokens / max_tokens if max_tokens > 0 else 0.0
-                os.environ['CAI_CONTEXT_USAGE'] = str(new_context_usage)
-                
-                return new_input, new_system_instructions, True
-                
-        except Exception as e:
-            console.print(f"[red]Auto-compaction failed: {e}[/red]")
-            console.print("[yellow]Continuing with full context...[/yellow]\n")
-        
-        return input, system_instructions, False
+        """Delegate to chatcompletions.auto_compactor.auto_compact_if_needed."""
+        global _compaction_in_progress
+
+        def _set_flag(val: bool):
+            global _compaction_in_progress
+            _compaction_in_progress = val
+
+        return await _auto_compact_if_needed_impl(
+            estimated_tokens=estimated_tokens,
+            input=input,
+            system_instructions=system_instructions,
+            model_name=str(self.model),
+            agent_name=self.agent_name,
+            message_history=self.message_history,
+            converter=self._converter,
+            compaction_in_progress_flag=_compaction_in_progress,
+            set_compaction_flag=_set_flag,
+        )
 
     def _intermediate_logs(self):
         """Intermediate logging if conditions are met."""
@@ -3582,8 +4538,15 @@ class OpenAIChatCompletionsModel(Model):
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
-            # Determine API key
-            api_key = os.getenv("ALIAS_API_KEY", os.getenv("OPENAI_API_KEY", "sk-alias-1234567890"))
+            api_key = resolve_llm_openai_compatible_api_key(str(self.model))
+            if not api_key:
+                _c = get_config()
+                raise UserError(
+                    "Missing API key for selected model. "
+                    "For alias-family models (alias*/cai*/csi*), set ALIAS_API_KEY. "
+                    "For OpenAI models, set OPENAI_API_KEY. "
+                    f"(CAI_MODEL={_c.model!r})"
+                )
             self._client = AsyncOpenAI(api_key=api_key)
         return self._client
 
@@ -3604,6 +4567,8 @@ class OpenAIChatCompletionsModel(Model):
         # Qwen/Ollama function_call format
         if isinstance(delta, dict) and "function_call" in delta:
             function_call = delta["function_call"]
+            if function_call is None:
+                return None
             return [
                 {
                     "index": 0,
@@ -3626,8 +4591,8 @@ class OpenAIChatCompletionsModel(Model):
                     json_end = content.rfind("}") + 1
                     if json_start >= 0 and json_end > json_start:
                         json_str = content[json_start:json_end]
-                        parsed = json.loads(json_str)
-                        if "name" in parsed and "arguments" in parsed:
+                        parsed = _safe_json_loads(json_str, "delta content function call")
+                        if parsed and "name" in parsed and "arguments" in parsed:
                             # This looks like a function call in JSON format
                             return [
                                 {
@@ -3677,668 +4642,12 @@ class OpenAIChatCompletionsModel(Model):
         return None
 
 
-class _Converter:
-    def __init__(self):
-        """Initialize converter with instance-based state."""
-        self.recent_tool_calls = {}
-        self.tool_outputs = {}
-
-    def convert_tool_choice(
-        self, tool_choice: Literal["auto", "required", "none"] | str | None
-    ) -> ChatCompletionToolChoiceOptionParam | NotGiven:
-        if tool_choice is None:
-            return "auto"
-        elif tool_choice == "auto":
-            return "auto"
-        elif tool_choice == "required":
-            return "required"
-        elif tool_choice == "none":
-            return "none"
-        else:
-            return {
-                "type": "function",
-                "function": {
-                    "name": tool_choice,
-                },
-            }
-
-    def convert_response_format(
-        self, final_output_schema: AgentOutputSchema | None
-    ) -> ResponseFormat | NotGiven:
-        if not final_output_schema or final_output_schema.is_plain_text():
-            return None
-
-        return {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "final_output",
-                "strict": final_output_schema.strict_json_schema,
-                "schema": final_output_schema.json_schema(),
-            },
-        }
-
-    def message_to_output_items(self, message: ChatCompletionMessage) -> list[TResponseOutputItem]:
-        items: list[TResponseOutputItem] = []
-
-        message_item = ResponseOutputMessage(
-            id=FAKE_RESPONSES_ID,
-            content=[],
-            role="assistant",
-            type="message",
-            status="completed",
-        )
-        if message.content:
-            message_item.content.append(
-                ResponseOutputText(text=message.content, type="output_text", annotations=[])
-            )
-        if hasattr(message, "refusal") and message.refusal:
-            message_item.content.append(
-                ResponseOutputRefusal(refusal=message.refusal, type="refusal")
-            )
-        if hasattr(message, "audio") and message.audio:
-            raise AgentsException("🎵 Audio output not supported - Text responses only")
-
-        if message_item.content:
-            items.append(message_item)
-
-        if hasattr(message, "tool_calls") and message.tool_calls:
-            for tool_call in message.tool_calls:
-                items.append(
-                    ResponseFunctionToolCall(
-                        id=FAKE_RESPONSES_ID,
-                        call_id=tool_call.id[:40],
-                        arguments=tool_call.function.arguments,
-                        name=tool_call.function.name,
-                        type="function_call",
-                    )
-                )
-
-        return items
-
-    def maybe_easy_input_message(self, item: Any) -> EasyInputMessageParam | None:
-        if not isinstance(item, dict):
-            return None
-
-        keys = item.keys()
-        # EasyInputMessageParam only has these two keys
-        if keys != {"content", "role"}:
-            return None
-
-        role = item.get("role", None)
-        if role not in ("user", "assistant", "system", "developer"):
-            return None
-
-        if "content" not in item:
-            return None
-
-        return cast(EasyInputMessageParam, item)
-
-    def maybe_input_message(self, item: Any) -> Message | None:
-        if (
-            isinstance(item, dict)
-            and item.get("type") == "message"
-            and item.get("role")
-            in (
-                "user",
-                "system",
-                "developer",
-            )
-        ):
-            return cast(Message, item)
-
-        return None
-
-    def maybe_file_search_call(self, item: Any) -> ResponseFileSearchToolCallParam | None:
-        if isinstance(item, dict) and item.get("type") == "file_search_call":
-            return cast(ResponseFileSearchToolCallParam, item)
-        return None
-
-    def maybe_function_tool_call(self, item: Any) -> ResponseFunctionToolCallParam | None:
-        if isinstance(item, dict) and item.get("type") == "function_call":
-            return cast(ResponseFunctionToolCallParam, item)
-        return None
-
-    def maybe_function_tool_call_output(
-        self,
-        item: Any,
-    ) -> FunctionCallOutput | None:
-        if isinstance(item, dict) and item.get("type") == "function_call_output":
-            return cast(FunctionCallOutput, item)
-        return None
-
-    def maybe_item_reference(self, item: Any) -> ItemReference | None:
-        if isinstance(item, dict) and item.get("type") == "item_reference":
-            return cast(ItemReference, item)
-        return None
-
-    def maybe_response_output_message(self, item: Any) -> ResponseOutputMessageParam | None:
-        # ResponseOutputMessage is only used for messages with role assistant
-        if (
-            isinstance(item, dict)
-            and item.get("type") == "message"
-            and item.get("role") == "assistant"
-        ):
-            return cast(ResponseOutputMessageParam, item)
-        return None
-
-    def extract_text_content(
-        self, content: str | Iterable[ResponseInputContentParam]
-    ) -> str | list[ChatCompletionContentPartTextParam]:
-        all_content = self.extract_all_content(content)
-        if isinstance(all_content, str):
-            return all_content
-        out: list[ChatCompletionContentPartTextParam] = []
-        for c in all_content:
-            if c.get("type") == "text":
-                out.append(cast(ChatCompletionContentPartTextParam, c))
-        return out
-
-    def extract_all_content(
-        self, content: str | Iterable[ResponseInputContentParam]
-    ) -> str | list[ChatCompletionContentPartParam]:
-        if isinstance(content, str):
-            return content
-        out: list[ChatCompletionContentPartParam] = []
-
-        for c in content:
-            if isinstance(c, dict) and c.get("type") == "input_text":
-                casted_text_param = cast(ResponseInputTextParam, c)
-                out.append(
-                    ChatCompletionContentPartTextParam(
-                        type="text",
-                        text=casted_text_param["text"],
-                    )
-                )
-            elif isinstance(c, dict) and c.get("type") == "input_image":
-                casted_image_param = cast(ResponseInputImageParam, c)
-                if "image_url" not in casted_image_param or not casted_image_param["image_url"]:
-                    raise UserError(
-                        "🖼️ Image URLs required - Upload images to a URL first"
-                    )
-                out.append(
-                    ChatCompletionContentPartImageParam(
-                        type="image_url",
-                        image_url={
-                            "url": casted_image_param["image_url"],
-                            "detail": casted_image_param["detail"],
-                        },
-                    )
-                )
-            elif isinstance(c, dict) and c.get("type") == "input_file":
-                raise UserError("📄 File uploads not supported - Use image URLs or text content")
-            else:
-                raise UserError(f"❓ Unrecognized content type - Expected 'input_text' or 'input_image'")
-        return out
-
-    def items_to_messages(
-        self,
-        items: str | Iterable[TResponseInputItem],
-        model_instance=None,
-    ) -> list[ChatCompletionMessageParam]:
-        """
-        Convert a sequence of 'Item' objects into a list of ChatCompletionMessageParam.
-
-        Rules:
-        - EasyInputMessage or InputMessage (role=user) => ChatCompletionUserMessageParam
-        - EasyInputMessage or InputMessage (role=system) => ChatCompletionSystemMessageParam
-        - EasyInputMessage or InputMessage (role=developer) => ChatCompletionDeveloperMessageParam
-        - InputMessage (role=assistant) => Start or flush a ChatCompletionAssistantMessageParam
-        - response_output_message => Also produces/flushes a ChatCompletionAssistantMessageParam
-        - tool calls get attached to the *current* assistant message, or create one if none.
-        - tool outputs => ChatCompletionToolMessageParam
-        """
-
-        if isinstance(items, str):
-            return [
-                ChatCompletionUserMessageParam(
-                    role="user",
-                    content=items,
-                )
-            ]
-
-        result: list[ChatCompletionMessageParam] = []
-        current_assistant_msg: ChatCompletionAssistantMessageParam | None = None
-
-        def flush_assistant_message() -> None:
-            nonlocal current_assistant_msg
-            if current_assistant_msg is not None:
-                # The API doesn't support empty arrays for tool_calls
-                if not current_assistant_msg.get("tool_calls"):
-                    # Ensure content is not None if tool_calls are absent and content is also None
-                    # Some models like Anthropic require some content, even if it's just a placeholder.
-                    if current_assistant_msg.get("content") is None:
-                        current_assistant_msg["content"] = (
-                            "(No text content in this assistant message)"  # Or just an empty string if preferred
-                        )
-                    current_assistant_msg.pop(
-                        "tool_calls", None
-                    )  # Use pop with default to avoid KeyError
-                result.append(current_assistant_msg)
-                current_assistant_msg = None
-
-        def ensure_assistant_message() -> ChatCompletionAssistantMessageParam:
-            nonlocal current_assistant_msg
-            if current_assistant_msg is None:
-                current_assistant_msg = ChatCompletionAssistantMessageParam(role="assistant")
-                current_assistant_msg["tool_calls"] = []
-            return current_assistant_msg
-
-        for item in items:
-            # NEW: Handle 'tool' messages from history
-            if (
-                isinstance(item, dict)
-                and item.get("role") == "tool"
-                and "tool_call_id" in item
-                and "content" in item
-            ):
-                flush_assistant_message()  # Ensure any pending assistant message is flushed
-                tool_message: ChatCompletionToolMessageParam = {
-                    "role": "tool",
-                    "tool_call_id": item["tool_call_id"],
-                    "content": str(item["content"] or ""),  # Ensure content is a string
-                }
-                result.append(tool_message)
-                continue
-
-            # 0) Assistant messages with tool_calls only (from memory)
-            if (
-                isinstance(item, dict)
-                and item.get("role") == "assistant"
-                and item.get("tool_calls")
-            ):
-                flush_assistant_message()
-                tool_calls_param: list[ChatCompletionMessageToolCallParam] = []
-                for tc in item["tool_calls"]:
-                    function_details = tc.get("function", {})
-                    arguments = function_details.get("arguments")
-                    # Ensure arguments is a valid JSON string, defaulting to "{}" if empty or None
-                    if arguments is None or (
-                        isinstance(arguments, str) and arguments.strip() == ""
-                    ):
-                        arguments = "{}"
-                    elif isinstance(arguments, dict):
-                        # Ensure it's a string if it's a dict (should already be string per schema)
-                        arguments = json.dumps(arguments)
-
-                    tool_calls_param.append(
-                        ChatCompletionMessageToolCallParam(
-                            id=tc.get("id", "")[:40],
-                            type=tc.get("type", "function"),
-                            function={
-                                "name": function_details.get("name", "unknown_function"),
-                                "arguments": arguments,  # Use sanitized arguments
-                            },
-                        )
-                    )
-                msg_asst: ChatCompletionAssistantMessageParam = {
-                    "role": "assistant",
-                    "content": item.get("content"),  # Content can be None here
-                    "tool_calls": tool_calls_param,
-                }
-                result.append(msg_asst)
-                # Skip further processing for this item
-                continue
-
-            # 1) Check easy input message
-            if easy_msg := self.maybe_easy_input_message(item):
-                role = easy_msg["role"]
-                content = easy_msg["content"]
-
-                if role == "user":
-                    flush_assistant_message()
-                    msg_user: ChatCompletionUserMessageParam = {
-                        "role": "user",
-                        "content": self.extract_all_content(content),
-                    }
-                    result.append(msg_user)
-                elif role == "system":
-                    flush_assistant_message()
-                    msg_system: ChatCompletionSystemMessageParam = {
-                        "role": "system",
-                        "content": self.extract_text_content(content),
-                    }
-                    result.append(msg_system)
-                elif role == "developer":
-                    flush_assistant_message()
-                    msg_developer: ChatCompletionDeveloperMessageParam = {
-                        "role": "developer",
-                        "content": self.extract_text_content(content),
-                    }
-                    result.append(msg_developer)
-                elif role == "assistant":
-                    flush_assistant_message()
-                    msg_assistant: ChatCompletionAssistantMessageParam = {
-                        "role": "assistant",
-                        "content": self.extract_text_content(content),
-                    }
-                    result.append(msg_assistant)
-                else:
-                    raise UserError(f"👥 Invalid role '{role}' - Use: user, assistant, system, or developer")
-
-            # 2) Check input message
-            elif in_msg := self.maybe_input_message(item):
-                role = in_msg["role"]
-                content = in_msg["content"]
-                flush_assistant_message()
-
-                if role == "user":
-                    msg_user = {
-                        "role": "user",
-                        "content": self.extract_all_content(content),
-                    }
-                    result.append(msg_user)
-                elif role == "system":
-                    msg_system = {
-                        "role": "system",
-                        "content": self.extract_text_content(content),
-                    }
-                    result.append(msg_system)
-                elif role == "developer":
-                    msg_developer = {
-                        "role": "developer",
-                        "content": self.extract_text_content(content),
-                    }
-                    result.append(msg_developer)
-                else:
-                    raise UserError(f"👥 Invalid message role '{role}' - Must be: user, system, or developer")
-
-            # 3) response output message => assistant
-            elif resp_msg := self.maybe_response_output_message(item):
-                flush_assistant_message()
-                new_asst = ChatCompletionAssistantMessageParam(role="assistant")
-                contents = resp_msg["content"]
-
-                text_segments = []
-                for c in contents:
-                    if c["type"] == "output_text":
-                        text_segments.append(c["text"])
-                    elif c["type"] == "refusal":
-                        new_asst["refusal"] = c["refusal"]
-                    elif c["type"] == "output_audio":
-                        # Can't handle this, b/c chat completions expects an ID which we dont have
-                        raise UserError(
-                            "🎵 Audio content must use audio IDs - Direct audio data not supported"
-                        )
-                    else:
-                        raise UserError("❓ Unknown assistant message content - Check message format")
-
-                if text_segments:
-                    combined = "\n".join(text_segments)
-                    new_asst["content"] = combined
-
-                new_asst["tool_calls"] = []
-                current_assistant_msg = new_asst
-
-            # 4) function/file-search calls => attach to assistant
-            elif file_search := self.maybe_file_search_call(item):
-                asst = ensure_assistant_message()
-                tool_calls = list(asst.get("tool_calls", []))
-                new_tool_call = ChatCompletionMessageToolCallParam(
-                    id=file_search["id"][:40],
-                    type="function",
-                    function={
-                        "name": "file_search_call",
-                        "arguments": json.dumps(
-                            {
-                                "queries": file_search.get("queries", []),
-                                "status": file_search.get("status"),
-                            }
-                        ),
-                    },
-                )
-                tool_calls.append(new_tool_call)
-                asst["tool_calls"] = tool_calls
-
-            elif func_call := self.maybe_function_tool_call(item):
-                asst = ensure_assistant_message()
-                tool_calls = list(asst.get("tool_calls", []))
-
-                # Save the tool call details for later matching with output
-                if not hasattr(self, "recent_tool_calls"):
-                    self.recent_tool_calls = {}
-
-                # Store the tool call by ID for later reference
-                # Also store the current time for execution timing
-                import time
-
-                self.recent_tool_calls[func_call["call_id"]] = {
-                    "name": func_call["name"],
-                    "arguments": func_call["arguments"],
-                    "start_time": time.time(),
-                    "execution_info": {"start_time": time.time()},
-                }
-
-                arguments = func_call.get("arguments")  # func_call is a dict here
-                # Ensure arguments is a valid JSON string, defaulting to "{}" if empty or None
-                if arguments is None or (isinstance(arguments, str) and arguments.strip() == ""):
-                    arguments = "{}"
-                elif isinstance(arguments, dict):
-                    arguments = json.dumps(arguments)
-
-                new_tool_call = ChatCompletionMessageToolCallParam(
-                    id=func_call["call_id"][:40],
-                    type="function",
-                    function={
-                        "name": func_call["name"],
-                        "arguments": arguments,  # Use sanitized arguments
-                    },
-                )
-                tool_calls.append(new_tool_call)
-                asst["tool_calls"] = tool_calls
-
-            # 5) function call output => tool message
-            elif func_output := self.maybe_function_tool_call_output(item):
-                # Store the output for this call_id
-                call_id = func_output["call_id"]
-                output_content = func_output["output"]
-
-                # IMPORTANT: Truncate call_id to 40 characters for consistency
-                truncated_call_id = call_id[:40] if call_id else call_id
-
-                # Update execution timing if we have the start time
-                if hasattr(self, "recent_tool_calls") and call_id in self.recent_tool_calls:
-                    tool_call_details = self.recent_tool_calls[call_id]  # Renamed for clarity
-                    if "start_time" in tool_call_details:
-                        end_time = time.time()
-                        tool_execution_time = end_time - tool_call_details["start_time"]
-
-                        # Update the execution info
-                        if "execution_info" in tool_call_details:
-                            tool_call_details["execution_info"]["end_time"] = end_time
-                            tool_call_details["execution_info"]["tool_time"] = tool_execution_time
-
-                            # If this is the first tool being executed, record the total time from conversation start
-                            if not hasattr(self, "conversation_start_time"):
-                                self.conversation_start_time = tool_call_details["start_time"]
-
-                            total_time = end_time - getattr(
-                                self, "conversation_start_time", tool_call_details["start_time"]
-                            )
-                            tool_call_details["execution_info"]["total_time"] = total_time
-
-                # Store the output so it can be accessed later
-                if not hasattr(self, "tool_outputs"):
-                    self.tool_outputs = {}
-
-                self.tool_outputs[call_id] = output_content
-
-                # Display the tool output immediately with the matched tool call
-                from cai.util import cli_print_tool_output
-
-                # Look up the original tool call to get the name and arguments
-                tool_name = "Unknown Tool"
-                tool_args = {}
-                execution_info = {}
-
-                if hasattr(self, "recent_tool_calls") and call_id in self.recent_tool_calls:
-                    tool_call_details = self.recent_tool_calls[call_id]  # Renamed for clarity
-                    tool_name = tool_call_details.get("name", "Unknown Tool")
-                    tool_args = tool_call_details.get("arguments", {})
-                    execution_info = tool_call_details.get("execution_info", {})
-
-                # Get token counts from the OpenAIChatCompletionsModel if available
-                model_instance = None
-                for frame in inspect.stack():
-                    if "self" in frame.frame.f_locals:
-                        self_obj = frame.frame.f_locals["self"]
-                        if isinstance(self_obj, OpenAIChatCompletionsModel):
-                            model_instance = self_obj
-                            break
-
-                # Always create a token_info dictionary, even if some values are zero
-                token_info = {
-                    "interaction_input_tokens": getattr(
-                        model_instance, "interaction_input_tokens", 0
-                    ),
-                    "interaction_output_tokens": getattr(
-                        model_instance, "interaction_output_tokens", 0
-                    ),
-                    "interaction_reasoning_tokens": getattr(
-                        model_instance, "interaction_reasoning_tokens", 0
-                    ),
-                    "total_input_tokens": getattr(model_instance, "total_input_tokens", 0),
-                    "total_output_tokens": getattr(model_instance, "total_output_tokens", 0),
-                    "total_reasoning_tokens": getattr(model_instance, "total_reasoning_tokens", 0),
-                    "model": str(getattr(model_instance, "model", "")),
-                    "agent_name": getattr(model_instance, "agent_name", "Agent"),
-                }
-
-                # Use already-calculated costs from COST_TRACKER instead of recalculating
-                if model_instance and hasattr(model_instance, "model"):
-                    from cai.util import COST_TRACKER
-                    
-                    # Use the last recorded costs instead of recalculating
-                    token_info["interaction_cost"] = getattr(COST_TRACKER, "last_interaction_cost", 0.0)
-                    token_info["total_cost"] = getattr(COST_TRACKER, "last_total_cost", 0.0)
-
-                # Check if we're in streaming mode
-                is_streaming_enabled = os.environ.get("CAI_STREAM", "false").lower() == "true"
-
-                # Check if this output was already displayed during streaming
-                # For async sessions, we always display since they don't have real streaming
-                should_display = True
-
-                # If streaming is enabled, check if this was already shown
-                if (
-                    is_streaming_enabled
-                    and hasattr(self, "recent_tool_calls")
-                    and call_id in self.recent_tool_calls
-                ):
-                    tool_call_info = self.recent_tool_calls[call_id]
-                    # Check if this tool was executed very recently (within last 5 seconds)
-                    # This indicates it was likely shown during streaming
-                    if "start_time" in tool_call_info:
-                        time_since_execution = time.time() - tool_call_info["start_time"]
-                        # For generic_linux_command executed recently in streaming mode, skip display
-                        # But always display for async session commands (they have session_id in args)
-                        # and always display for non-generic_linux_command tools
-                        if time_since_execution < 5.0 and "_command" in tool_name.lower():
-                            # Parse arguments to check if this is an async session command
-                            try:
-                                import json
-
-                                args_dict = (
-                                    json.loads(tool_args)
-                                    if isinstance(tool_args, str)
-                                    else tool_args
-                                )
-                                # If it has session_id, it's an async command - always show
-                                if not (
-                                    isinstance(args_dict, dict) and args_dict.get("session_id")
-                                ):
-                                    should_display = False
-                            except:
-                                should_display = False
-                        
-
-                # Only display if it hasn't been shown during streaming
-                if should_display:
-                    cli_print_tool_output(
-                        tool_name=tool_name,
-                        args=tool_args,
-                        output=output_content,
-                        call_id=call_id,
-                        execution_info=execution_info,
-                        token_info=token_info,
-                    )
-
-                # Continue with normal processing
-                flush_assistant_message()
-
-                # ATOMIC ADDITION: Add pending tool call and response together
-                # This ensures we never have tool calls without responses in history
-                if model_instance and hasattr(model_instance, "_pending_tool_calls"):
-                    # Check if we have a pending tool call for this ID
-                    if call_id in model_instance._pending_tool_calls:
-                        # Add the assistant message with tool call first
-                        pending_msg = model_instance._pending_tool_calls[call_id]
-                        model_instance.add_to_message_history(pending_msg)
-
-                        # Now add the tool response
-                        tool_response_msg = {
-                            "role": "tool",
-                            "tool_call_id": truncated_call_id,
-                            "content": func_output["output"],
-                        }
-                        model_instance.add_to_message_history(tool_response_msg)
-
-                        # Remove from pending
-                        del model_instance._pending_tool_calls[call_id]
-
-                        # Log both messages
-                        if hasattr(model_instance, "logger"):
-                            # Log the tool call with its response
-                            # Note: Tool responses are logged as part of the training data recording,
-                            # not as separate events
-                            pass
-
-                # Now add the tool message with truncated call_id
-                msg: ChatCompletionToolMessageParam = {
-                    "role": "tool",
-                    "tool_call_id": truncated_call_id,
-                    "content": func_output["output"],
-                }
-                result.append(msg)
-
-            # 6) item reference => handle or raise
-            elif item_ref := self.maybe_item_reference(item):
-                raise UserError(
-                    "🔗 Item references not supported - Include content directly"
-                )
-
-            # 7) If we haven't recognized it => fail or ignore
-            else:
-                raise UserError("❌ Invalid message format - Check documentation for supported types")
-
-        flush_assistant_message()
-        return result
-
-
-class ToolConverter:
-    @classmethod
-    def to_openai(cls, tool: Tool) -> ChatCompletionToolParam:
-        if isinstance(tool, FunctionTool):
-            return {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "parameters": tool.params_json_schema,
-                },
-            }
-
-        raise UserError(
-            f"Hosted tools are not supported with the ChatCompletions API. FGot tool type: "
-            f"{type(tool)}, tool: {tool}"
-        )
-
-    @classmethod
-    def convert_handoff_tool(cls, handoff: Handoff[Any]) -> ChatCompletionToolParam:
-        return {
-            "type": "function",
-            "function": {
-                "name": handoff.tool_name,
-                "description": handoff.tool_description,
-                "parameters": handoff.input_json_schema,
-            },
-        }
+# _Converter is now defined in chatcompletions/message_builder.py
+# Keep a local alias for backward compatibility within this file.
+_Converter = _NewConverter
+
+
+# _Converter and ToolConverter are now defined in chatcompletions/message_builder.py
+# Keep local aliases for full backward compatibility.
+_Converter = _NewConverter
+# ToolConverter is already imported from .chatcompletions.message_builder above.

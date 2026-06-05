@@ -256,9 +256,9 @@ async def test_handoff_filters():
 
     assert result.final_output == "last"
     assert len(result.raw_responses) == 2, "should have two model responses"
-    assert len(result.to_input_list()) == 2, (
-        "should only have 2 inputs: orig input and last message"
-    )
+    assert (
+        len(result.to_input_list()) == 2
+    ), "should only have 2 inputs: orig input and last message"
 
 
 @pytest.mark.asyncio
@@ -592,9 +592,9 @@ async def test_tool_use_behavior_first_output():
 
     result = await Runner.run(agent, input="user_message")
 
-    assert result.final_output == Foo(bar="tool_one_result"), (
-        "should have used the first tool result"
-    )
+    assert result.final_output == Foo(
+        bar="tool_one_result"
+    ), "should have used the first tool result"
 
 
 def custom_tool_use_behavior(
@@ -642,9 +642,7 @@ async def test_tool_use_behavior_custom_function():
 async def test_model_settings_override():
     model = FakeModel()
     agent = Agent(
-        name="test",
-        model=model,
-        model_settings=ModelSettings(temperature=1.0, max_tokens=1000)
+        name="test", model=model, model_settings=ModelSettings(temperature=1.0, max_tokens=1000)
     )
 
     model.add_multiple_turn_outputs(

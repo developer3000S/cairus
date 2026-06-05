@@ -14,6 +14,7 @@ from .exceptions import (
     MaxTurnsExceeded,
     ModelBehaviorError,
     OutputGuardrailTripwireTriggered,
+    UserCancelledCommand,
     UserError,
 )
 from .guardrail import (
@@ -38,6 +39,7 @@ from .items import (
     ToolCallOutputItem,
     TResponseInputItem,
 )
+from .hooks import AgentLoopHook, DEFAULT_LOOP_HOOKS, TurnResult
 from .lifecycle import AgentHooks, RunHooks
 from .model_settings import ModelSettings
 from .models.interface import Model, ModelProvider, ModelTracing
@@ -166,6 +168,7 @@ __all__ = [
     "OutputGuardrailTripwireTriggered",
     "MaxTurnsExceeded",
     "ModelBehaviorError",
+    "UserCancelledCommand",
     "UserError",
     "InputGuardrail",
     "InputGuardrailResult",
@@ -191,6 +194,9 @@ __all__ = [
     "ItemHelpers",
     "RunHooks",
     "AgentHooks",
+    "AgentLoopHook",
+    "TurnResult",
+    "DEFAULT_LOOP_HOOKS",
     "RunContextWrapper",
     "TContext",
     "RunResult",

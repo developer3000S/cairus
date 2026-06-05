@@ -1,4 +1,5 @@
 """Use Case Agent"""
+
 import os
 from dotenv import load_dotenv
 from cai.sdk.agents import Agent, OpenAIChatCompletionsModel
@@ -33,7 +34,10 @@ use_case_agent = Agent(
     description="""Agent that creates high-quality cybersecurity case studies 
                    demonstrating how CAI tackles various security scenarios, 
                    CTF challenges, and cybersecurity exercises.""",
-    instructions=create_system_prompt_renderer(use_case_agent_system_prompt),
+    instructions=create_system_prompt_renderer(
+        use_case_agent_system_prompt,
+        cyber_micro_profile_key="usecase",
+    ),
     tools=tools,
     model=OpenAIChatCompletionsModel(
         model=model_name,
@@ -41,9 +45,9 @@ use_case_agent = Agent(
     ),
 )
 
+
 # Transfer function
 def transfer_to_use_case_agent(**kwargs):  # pylint: disable=W0613
     """Transfer to use case agent.
     Accepts any keyword arguments but ignores them."""
     return use_case_agent
-

@@ -210,8 +210,17 @@ class BatchTraceProcessor(TracingProcessor):
         """
         Called when the application stops. We signal our thread to stop, then join it.
         """
+        if timeout is None:
+            timeout = 5.0
+
         self._shutdown_event.set()
+
+        start_time = time.time()
         self._worker_thread.join(timeout=timeout)
+
+        elapsed = time.time() - start_time
+        if self._worker_thread.is_alive():
+            logger.warning(f"Trace processor thread did not shut down within {elapsed:.2f}s timeout")
 
     def force_flush(self):
         """
@@ -220,45 +229,47 @@ class BatchTraceProcessor(TracingProcessor):
         self._export_batches(force=True)
 
     def _run(self):
-        while not self._shutdown_event.is_set():
-            current_time = time.time()
-            queue_size = self._queue.qsize()
+        try:
+            self._shutdown_event.clear()
+            start_time = time.time()
+            MAX_RUNTIME = 30
+            while not self._shutdown_event.is_set():
+                if time.time() - start_time > MAX_RUNTIME:
+                    break
+                current_time = time.time()
+                queue_size = self._queue.qsize()
 
-            # If it's time for a scheduled flush or queue is above the trigger threshold
-            if current_time >= self._next_export_time or queue_size >= self._export_trigger_size:
-                self._export_batches(force=False)
-                # Reset the next scheduled flush time
-                self._next_export_time = time.time() + self._schedule_delay
-            else:
-                # Sleep a short interval so we don't busy-wait.
-                time.sleep(0.2)
+                if current_time >= self._next_export_time or queue_size >= self._export_trigger_size:
+                    self._export_batches(force=False)
+                    self._next_export_time = current_time + self._schedule_delay
 
-        # Final drain after shutdown
-        self._export_batches(force=True)
+                # Espera hasta 200ms o hasta que se active shutdown
+                self._shutdown_event.wait(timeout=0.2)
+
+            # Shutdown activo → export final
+            self._export_batches(force=True)
+        except Exception as e:
+            logger.exception(f"Exception in trace processor thread: {e}")
+
 
     def _export_batches(self, force: bool = False):
-        """Drains the queue and exports in batches. If force=True, export everything.
-        Otherwise, export up to `max_batch_size` repeatedly until the queue is empty or below a
-        certain threshold.
-        """
         while True:
             items_to_export: list[Span[Any] | Trace] = []
 
-            # Gather a batch of spans up to max_batch_size
             while not self._queue.empty() and (
                 force or len(items_to_export) < self._max_batch_size
             ):
                 try:
-                    items_to_export.append(self._queue.get_nowait())
+                    item = self._queue.get_nowait()
+                    if item is None:
+                        continue  # Dummy item to unblock shutdown
+                    items_to_export.append(item)
                 except queue.Empty:
-                    # Another thread might have emptied the queue between checks
                     break
 
-            # If we collected nothing, we're done
             if not items_to_export:
                 break
 
-            # Export the batch
             self._exporter.export(items_to_export)
 
 

@@ -5,13 +5,6 @@ Here are the CLI tools for executing commands.
 from cai.tools.common import run_command  # pylint: disable=E0401
 from cai.sdk.agents import function_tool
 
-# Dangerous flags that enable RCE, file writes, or file deletion
-DANGEROUS_FIND_FLAGS = {
-    "-exec", "-execdir", "-ok", "-okdir",
-    "-delete",
-    "-fprintf", "-fprint", "-fls", "-fprint0",
-    "-print0",
-}
 
 @function_tool
 def list_dir(path: str, args: str = "", ctf=None) -> str:
@@ -25,8 +18,9 @@ def list_dir(path: str, args: str = "", ctf=None) -> str:
     Returns:
         str: The output of running the ls command
     """
-    command = f'ls {path} {args}'
+    command = f"ls {path} {args}"
     return run_command(command, ctf=ctf)
+
 
 @function_tool
 def cat_file(file_path: str, args: str = "", ctf=None) -> str:
@@ -40,7 +34,7 @@ def cat_file(file_path: str, args: str = "", ctf=None) -> str:
     Returns:
         str: The output of running the cat command
     """
-    command = f'cat {args} {file_path} '
+    command = f"cat {args} {file_path} "
     return run_command(command, ctf=ctf)
 
 
@@ -53,6 +47,7 @@ def cat_file(file_path: str, args: str = "", ctf=None) -> str:
 # FilePermissionsTool
 # FileCompressionTool
 
+
 @function_tool
 def pwd_command(ctf=None) -> str:
     """
@@ -61,18 +56,22 @@ def pwd_command(ctf=None) -> str:
     Returns:
         str: The absolute path of the current working directory
     """
-    command = 'pwd'
+    command = "pwd"
     return run_command(command, ctf=ctf)
+
 
 @function_tool
 def find_file(file_path: str, args: str = "", ctf=None) -> str:
     """
     Find a file in the filesystem.
     """
-    # Block dangerous flags that enable RCE, file writes, or deletion
-    for flag in DANGEROUS_FIND_FLAGS:
-        if flag in args:
-            return f"Error: DANGEROUS flag '{flag}' is not allowed"
-    
-    command = f'find {file_path} {args}'
+    command = f"find {file_path} {args}"
     return run_command(command, ctf=ctf)
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("list_dir", list_dir, categories=["recon", "misc"])
+TOOL_REGISTRY.register("cat_file", cat_file, categories=["recon", "misc"])
+TOOL_REGISTRY.register("pwd_command", pwd_command, categories=["recon", "misc"])
+TOOL_REGISTRY.register("find_file", find_file, categories=["recon", "misc"])

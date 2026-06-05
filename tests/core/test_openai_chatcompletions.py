@@ -32,7 +32,9 @@ from cai.sdk.agents import (
 )
 from cai.sdk.agents.models.fake_id import FAKE_RESPONSES_ID
 import os
-cai_model = os.getenv('CAI_MODEL', "qwen2.5:14b")
+
+cai_model = os.getenv("CAI_MODEL", "qwen2.5:14b")
+
 
 @pytest.mark.allow_call_model_methods
 @pytest.mark.asyncio
@@ -174,6 +176,31 @@ async def test_get_response_with_tool_call(monkeypatch) -> None:
     assert fn_call_item.name == "do_thing"
     assert fn_call_item.arguments == "{'x':1}"
 
+
+def test_get_token_info_includes_agent_metadata() -> None:
+    """The token info payload should expose agent metadata for the TUI sidebar."""
+
+    from unittest.mock import MagicMock
+
+    dummy_client = MagicMock()
+    dummy_client.base_url = "http://fake"  # Attribute accessed in some code paths
+
+    model = OpenAIChatCompletionsModel(model=cai_model, openai_client=dummy_client)  # type: ignore[arg-type]
+    model.agent_name = "Bug Bounter"
+    model.agent_id = "P42"
+    model._display_name = "Bug Bounter"
+    model._terminal_id = "terminal-9"
+    model._terminal_number = 9
+
+    token_info = model.get_token_info()
+
+    assert token_info["agent_name"] == "Bug Bounter"
+    assert token_info["agent_id"] == "P42"
+    assert token_info["display_name"] == "Bug Bounter"
+    assert token_info["terminal_id"] == "terminal-9"
+    assert token_info["terminal_number"] == 9
+
+
 @pytest.mark.asyncio
 async def test_fetch_response_non_stream(monkeypatch) -> None:
     """
@@ -222,7 +249,7 @@ async def test_fetch_response_non_stream(monkeypatch) -> None:
             tracing=ModelTracing.DISABLED,
             stream=False,
         )
-   
+
     # Ensure expected args were passed through to OpenAI client.
     kwargs = completions.kwargs
     assert kwargs["stream"] is False
@@ -245,7 +272,8 @@ async def test_fetch_response_stream(monkeypatch) -> None:
     object along with the underlying async stream. The OpenAI client call
     should include `stream_options` to request usage-delimited chunks.
     """
-    os.environ['CAI_STREAM'] = 'true'
+    os.environ["CAI_STREAM"] = "true"
+
     async def event_stream() -> AsyncIterator[ChatCompletionChunk]:
         if False:  # pragma: no cover
             yield  # pragma: no cover
@@ -306,9 +334,9 @@ async def test_interaction_counter_single_turn_with_tool_calls(monkeypatch) -> N
         function=Function(name="do_thing", arguments='{"x":1}'),
     )
     msg = ChatCompletionMessage(
-        role="assistant", 
-        content="I'll help you with that. Let me use a tool.", 
-        tool_calls=[tool_call]
+        role="assistant",
+        content="I'll help you with that. Let me use a tool.",
+        tool_calls=[tool_call],
     )
     choice = Choice(index=0, finish_reason="stop", message=msg)
     chat = ChatCompletion(
@@ -325,10 +353,10 @@ async def test_interaction_counter_single_turn_with_tool_calls(monkeypatch) -> N
 
     monkeypatch.setattr(OpenAIChatCompletionsModel, "_fetch_response", patched_fetch_response)
     model = OpenAIProvider(use_responses=False).get_model(cai_model)
-    
+
     # Initial counter should be 0
     assert model.interaction_counter == 0
-    
+
     # Make the request
     resp: ModelResponse = await model.get_response(
         system_instructions="You are a helpful assistant",
@@ -339,15 +367,15 @@ async def test_interaction_counter_single_turn_with_tool_calls(monkeypatch) -> N
         handoffs=[],
         tracing=ModelTracing.DISABLED,
     )
-    
+
     # Counter should be incremented only once for the entire turn
     assert model.interaction_counter == 1
-    
+
     # Verify response contains both message and tool call
     assert len(resp.output) == 2  # One message item, one tool call item
     assert isinstance(resp.output[0], ResponseOutputMessage)
     assert isinstance(resp.output[1], ResponseFunctionToolCall)
-    
+
     # Make another request to ensure counter increments properly
     resp2: ModelResponse = await model.get_response(
         system_instructions="You are a helpful assistant",
@@ -358,6 +386,6 @@ async def test_interaction_counter_single_turn_with_tool_calls(monkeypatch) -> N
         handoffs=[],
         tracing=ModelTracing.DISABLED,
     )
-    
+
     # Counter should now be 2 (one increment per turn, not per item)
     assert model.interaction_counter == 2

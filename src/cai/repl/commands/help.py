@@ -16,20 +16,23 @@ except ImportError as exc:
     ) from exc
 
 from cai.repl.commands.base import COMMAND_ALIASES, COMMANDS, Command, register_command
-
-try:
-    from caiextensions.platform.base.platform_manager import PlatformManager
-    HAS_PLATFORM_EXTENSIONS = True
-except ImportError:
-    HAS_PLATFORM_EXTENSIONS = False
-
-from cai import is_caiextensions_platform_available
+from cai.repl.commands.command_reference_index import categorized_command_tables
+from cai.repl.commands.config import print_config_deprecated_message
+from cai.repl.commands.settings_cli_catalog import settings_help_panel_subcommand_bullets
+from cai.repl.ui.banner import _CAI_GREEN, _quick_guide_subpanel_title
 
 console = Console()
 
 
+def _h_panel_desc(text: str) -> str:
+    """One-line intro for ``/h <topic>`` panels (below the green title bar; body, not dim)."""
+    return f"[white]{text}[/white]\n\n"
+
+
 def create_styled_table(
-    title: str, headers: List[tuple[str, str]], header_style: str = "bold white"
+    title: Optional[str],
+    headers: List[tuple[str, str]],
+    header_style: str = "bold white",
 ) -> Table:
     """Create a styled table with consistent formatting.
 
@@ -48,20 +51,153 @@ def create_styled_table(
 
 
 def create_notes_panel(
-    notes: List[str], title: str = "Notes", border_style: str = "yellow"
+    notes: List[str], title: str = "Notes", border_style: str | None = None
 ) -> Panel:
     """Create a notes panel with consistent formatting.
 
     Args:
         notes: List of note strings
         title: Panel title
-        border_style: Style for the panel border
+        border_style: Style for the panel border (defaults to CAI green)
 
     Returns:
         A configured Panel instance
     """
     notes_text = Text.from_markup("\n".join(f"• {note}" for note in notes))
-    return Panel(notes_text, title=title, border_style=border_style)
+    return Panel(
+        notes_text,
+        title=_quick_guide_subpanel_title(title),
+        title_align="left",
+        border_style=border_style or _CAI_GREEN,
+        padding=(1, 1),
+    )
+
+
+def model_help_panel_markup() -> str:
+    """Rich markup for ``/h model`` (authoritative model CLI syntax)."""
+    z = _CAI_GREEN
+    return (
+        _h_panel_desc(
+            "Model selection: browse and set CAI_MODEL from the short table or the full catalog."
+        )
+        + f"[bold {z}]Syntax[/bold {z}]\n"
+        f"• [bold {z}]/model[/bold {z}] — current model and short table\n"
+        f"• [bold {z}]/model show[/bold {z}] — full LiteLLM catalog\n"
+        f"• [bold {z}]/model show supported[/bold {z}] — function-calling models only\n"
+        f"• [bold {z}]/model show <term>[/bold {z}] — filter by name\n"
+        f"• [bold {z}]/model show supported <term>[/bold {z}] — filter supported set\n"
+        f"• [bold {z}]/model <name>[/bold {z}] or [bold {z}]/model <n>[/bold {z}] — set "
+        f"[bold]CAI_MODEL[/bold] if the id exists in the loaded catalog (applies next turn)\n\n"
+        f"[bold {z}]Notes[/bold {z}]\n"
+        f"• API keys: [bold {z}]/env list[/bold {z}]\n"
+        f"• Row numbers match [bold {z}]/model show[/bold {z}]; the short table skips "
+        "LiteLLM-only slots\n\n"
+        f"[dim]Alias: /mod[/dim]"
+    )
+
+
+def graph_help_panel_markup() -> str:
+    """Rich markup for ``/h graph`` (aligned with ``GraphCommand`` subcommands)."""
+    z = _CAI_GREEN
+    return (
+        _h_panel_desc(
+            "Graph views show user, assistant, and tool messages; export to json, dot, or mermaid."
+        )
+        + f"[bold {z}]Available Commands:[/bold {z}]\n"
+        f"• [bold {z}]/graph[/bold {z}] or [bold {z}]/g[/bold {z}] — "
+        "multi-agent layout when [bold]CAI_PARALLEL[/bold]>1 or multiple parallel slots exist; "
+        "otherwise the active agent\n"
+        f"• [bold {z}]/graph show[/bold {z}] — same as bare [bold {z}]/graph[/bold {z}]\n"
+        f"• [bold {z}]/graph P1[/bold {z}] — graph for parallel agent by id (e.g. P2, P3)\n"
+        f"• [bold {z}]/graph <agent_name>[/bold {z}] — graph for a specific agent (name may include spaces)\n"
+        f"• [bold {z}]/graph all[/bold {z}] — graphs for every agent that has history\n"
+        f"• [bold {z}]/graph timeline[/bold {z}] — table of messages per agent (by message index)\n"
+        f"• [bold {z}]/graph stats[/bold {z}] — per-agent message and tool-call counts\n"
+        f"• [bold {z}]/graph export <format>[/bold {z}] — export data (optional filename)\n\n"
+        f"[bold {z}]Examples:[/bold {z}]\n"
+        f"• [bold {z}]/graph[/bold {z}] — current context graph\n"
+        f"• [bold {z}]/graph P2[/bold {z}] — graph for agent P2\n"
+        f"• [bold {z}]/graph red_teamer[/bold {z}] — graph for that agent\n"
+        f"• [bold {z}]/graph timeline[/bold {z}] — message table\n"
+        f"• [bold {z}]/graph stats[/bold {z}] — statistics\n"
+        f"• [bold {z}]/graph export mermaid graph.md[/bold {z}] — write a Mermaid file\n"
+        f"• [bold {z}]/g timeline[/bold {z}] — same via alias\n\n"
+        f"[bold {z}]Features:[/bold {z}]\n"
+        "• Multi-agent panels in parallel mode\n"
+        "• User, assistant, and tool-call flow in the graph\n"
+        "• Timeline table for cross-agent review (index order, not wall-clock)\n"
+        "• Stats across agents\n"
+        "• Export full tracked histories to a file\n\n"
+        "[dim]Exports: json (full messages), dot (Graphviz), mermaid (diagram text). "
+        "Optional path defaults to a timestamped name in the cwd.[/dim]\n\n"
+        f"[dim]Alias: /g[/dim]"
+    )
+
+
+def cost_help_panel_markup() -> str:
+    """Rich markup for ``/h cost`` (aligned with ``CostCommand`` subcommands)."""
+    z = _CAI_GREEN
+    return (
+        _h_panel_desc(
+            "Current session spend and tokens, plus global totals from ~/.cai/usage.json when "
+            "usage tracking is enabled."
+        )
+        + f"[bold {z}]Syntax[/bold {z}]\n"
+        f"• [bold {z}]/cost[/bold {z}] or [bold {z}]/cost summary[/bold {z}]: "
+        "session + global panels, top models snippet, hints for other views\n"
+        f"• [bold {z}]/cost models[/bold {z}] — per-model costs and share\n"
+        f"• [bold {z}]/cost daily[/bold {z}] — last 30 days and weekly rollup\n"
+        f"• [bold {z}]/cost sessions[/bold {z}] — recent sessions (default 10 rows); "
+        f"optional numeric arg limits rows (e.g. [bold {z}]/cost sessions 5[/bold {z}])\n"
+        f"• [bold {z}]/cost reset[/bold {z}] — clear persisted stats (type RESET to confirm; backup first)\n\n"
+        f"[bold {z}]Related[/bold {z}]\n"
+        f"• [bold {z}]/context[/bold {z}] — where context tokens go (per-role estimates + heavy messages)\n\n"
+        f"[bold {z}]Notes[/bold {z}]\n"
+        "• Cache tokens (read/write) are shown when the backend reports them (provider-dependent)\n"
+        "• Some views use local estimation; provider tokenization can differ by model\n\n"
+        f"[dim]Aliases: /costs, /usage. Global file tracking off: CAI_DISABLE_USAGE_TRACKING=true[/dim]"
+    )
+
+
+def auth_help_panel_markup() -> str:
+    """Rich markup for ``/h auth`` (aligned with ``AuthCommand`` subcommands)."""
+    z = _CAI_GREEN
+    return (
+        _h_panel_desc(
+            "Persisted API users (`AuthManager`): add a named account or pair a device by IP."
+        )
+        + f"[bold {z}]Syntax[/bold {z}]\n"
+        f"• [bold {z}]/auth add-user <username> <password>[/bold {z}] — register user\n"
+        f"• [bold {z}]/auth add-ip <ip[:port]>[/bold {z}] — random user + session, JSON over TCP to "
+        "the device listener (device port from [bold]CAI_AUTH_DEVICE_PORT[/bold])\n\n"
+        f"[dim]Device [bold]base_url[/bold]: [bold]CAI_AUTH_BASE_URL[/bold] if set, else public host/"
+        f"port envs and [bold]CAI_API_*[/bold]. Bare [bold {z}]/auth[/bold {z}] lists required "
+        "subcommands.[/dim]"
+    )
+
+
+def commands_reference_panel_markup() -> str:
+    """Full Rich markup for ``/h commands`` (single bordered panel, like ``/h agent``)."""
+    z = _CAI_GREEN
+    parts: list[str] = [
+        _h_panel_desc(
+            "All available commands"
+        )
+    ]
+    for category, commands in categorized_command_tables():
+        parts.append(f"[bold {z}]{category}[/bold {z}]\n")
+        for cmd, aliases, desc in commands:
+            alias_suffix = (
+                f" [dim]({aliases})[/dim]" if aliases and aliases.strip() else ""
+            )
+            parts.append(
+                f"• [bold {z}]{cmd}[/bold {z}]{alias_suffix} — [white]{desc}[/white]\n"
+            )
+        parts.append("\n")
+    parts.append(
+        "[dim]• /h <topic> — e.g. agent, env, model (command index: /help topics)[/dim]"
+    )
+    return "".join(parts)
 
 
 class HelpCommand(Command):
@@ -79,80 +215,212 @@ class HelpCommand(Command):
         # Agent Management
         self.add_subcommand("agent", "Display help for agent commands", self.handle_agent)
         self.add_subcommand("parallel", "Display help for parallel execution", self.handle_parallel)
-        self.add_subcommand("run", "Display help for queued execution", self.handle_run)
-        
+        self.add_subcommand("queue", "Display help for queue command", self.handle_queue)
+
         # Memory & History
         self.add_subcommand("memory", "Display help for memory persistence", self.handle_memory)
         self.add_subcommand("history", "Display help for conversation history", self.handle_history)
-        self.add_subcommand("compact", "Display help for conversation compaction", self.handle_compact)
+        self.add_subcommand(
+            "compact", "Display help for conversation compaction", self.handle_compact
+        )
         self.add_subcommand("flush", "Display help for clearing histories", self.handle_flush)
         self.add_subcommand("load", "Display help for loading JSONL files", self.handle_load)
-        self.add_subcommand("merge", "Display help for merging agent histories", self.handle_merge_help)
-        
-        # Environment & Config
-        self.add_subcommand("config", "Display help for configuration", self.handle_config)
+        self.add_subcommand("save", "Display help for saving conversation JSONL", self.handle_save)
+        self.add_subcommand(
+            "merge", "Display help for merging agent histories", self.handle_merge_help
+        )
+
+        self.add_subcommand("config", "Deprecated — same notice as /config; use /env", self.handle_config)
         self.add_subcommand("env", "Display help for environment variables", self.handle_env)
-        self.add_subcommand("workspace", "Display help for workspace management", self.handle_workspace)
-        self.add_subcommand("virtualization", "Display help for Docker containers", self.handle_virtualization)
-        
+        self.add_subcommand(
+            "var",
+            "Long-form help for environment variables (/help var NAME)",
+            self.handle_var,
+        )
+        self.add_subcommand(
+            "workspace", "Display help for workspace management", self.handle_workspace
+        )
+        self.add_subcommand(
+            "virtualization", "Display help for Docker containers", self.handle_virtualization
+        )
+
         # Tools & Integration
         self.add_subcommand("mcp", "Display help for Model Context Protocol", self.handle_mcp)
-        self.add_subcommand("platform", "Display help for platform commands", self.handle_platform)
         self.add_subcommand("shell", "Display help for shell commands", self.handle_shell)
-        
+
         # Utilities
         self.add_subcommand("model", "Display help for model selection", self.handle_model)
         self.add_subcommand("graph", "Display help for visualization", self.handle_graph)
-        self.add_subcommand("aliases", "Display all command aliases", self.handle_aliases)
-        self.add_subcommand("kill", "Display help for process management", self.handle_kill)
-        
+        self.add_subcommand(
+            "aliases",
+            "List registered command shortcuts",
+            self.handle_aliases,
+        )
+
+        # Session & Cost
+        self.add_subcommand("cost", "Display help for cost tracking", self.handle_cost)
+        self.add_subcommand("context", "Display help for context usage", self.handle_context)
+        self.add_subcommand("exit", "Display help for exiting CAI", self.handle_exit)
+        self.add_subcommand("resume", "Display help for session resume", self.handle_resume)
+        self.add_subcommand("sessions", "Display help for session listing", self.handle_sessions)
+        self.add_subcommand("replay", "Display help for session replay", self.handle_replay)
+        self.add_subcommand(
+            "continue", "Display help for continuation mode", self.handle_continue
+        )
+
+        # Model Tuning
+        self.add_subcommand(
+            "temperature", "Display help for temperature adjustment", self.handle_temperature
+        )
+        self.add_subcommand("topp", "Display help for top-p adjustment", self.handle_topp)
+
+        # Advanced
+        self.add_subcommand(
+            "settings", "Help for /settings (alias /set)", self.handle_settings
+        )
+        self.add_subcommand("auth", "Display help for API authentication", self.handle_auth)
+        self.add_subcommand("ctr", "Display help for CTR security analysis", self.handle_ctr)
+        self.add_subcommand("api", "Help for /api: ALIAS_API_KEY in .env (Alias / CAI PRO)", self.handle_api)
+        self.add_subcommand(
+            "metadebug", "Display help for meta-agent debugging", self.handle_metadebug
+        )
+
         # General
         self.add_subcommand("commands", "List all available commands", self.handle_commands)
-        self.add_subcommand("quick", "Quick reference guide", self.handle_quick)
-        self.add_subcommand("quickstart", "Show quickstart guide for new users", self.handle_quickstart)
+        self.add_subcommand(
+            "topics",
+            "Slash commands by category + /help <topic> hints; bare /help adds env tables",
+            self.handle_help_topics,
+        )
+
+    def handle_unknown_subcommand(self, subcommand: str) -> bool:
+        """Legacy help tokens ``quick`` / ``quickstart`` → point to ``/quickstart``."""
+        if subcommand in ("quick", "quickstart"):
+            console.print(
+                "[dim]There is no /help quick or /help quickstart; use [bold]/quickstart[/bold] "
+                "(aliases: /qs, /quick).[/dim]"
+            )
+            return False
+        return super().handle_unknown_subcommand(subcommand)
 
     def handle_memory(self, _: Optional[List[str]] = None) -> bool:
         """Show help for memory commands."""
-        # Get the memory command and show its help
-        memory_cmd = next((cmd for cmd in COMMANDS.values() if cmd.name == "/memory"), None)
-        if memory_cmd and hasattr(memory_cmd, "show_help"):
-            memory_cmd.show_help()
-            return True
-
-        # Fallback if memory command not found or doesn't have show_help
-        self.handle_help_memory()
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc("Memory: save, restore, and manage agent conversation snapshots.")
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/memory list[/bold #00ff9d] - List saved memory snapshots\n"
+                "• [bold #00ff9d]/memory save [name] [agent][/bold #00ff9d] - Save current agent history\n"
+                "• [bold #00ff9d]/memory apply <ID|name> [agent|all][/bold #00ff9d] - Apply memory to an agent\n"
+                "• [bold #00ff9d]/memory show <ID|name>[/bold #00ff9d] - Show memory contents\n"
+                "• [bold #00ff9d]/memory delete <ID|name>[/bold #00ff9d] - Delete a saved memory\n"
+                "• [bold #00ff9d]/memory merge <ID1> <ID2> [name][/bold #00ff9d] - Merge memories into one\n"
+                "• [bold #00ff9d]/memory status[/bold #00ff9d] - Show currently applied memories\n"
+                "• [bold #00ff9d]/memory compact <agent|all>[/bold #00ff9d] - Compact and save agent history\n"
+                "• [bold #00ff9d]/memory remove <memory_id> <agent>[/bold #00ff9d] - Remove a specific memory from agent\n"
+                "• [bold #00ff9d]/memory clear <agent>[/bold #00ff9d] - Clear all memories from an agent\n"
+                "• [bold #00ff9d]/memory list-applied [agent][/bold #00ff9d] - Show which memories are applied\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/memory save pentest_login_flow[/bold #00ff9d] - Save with a custom name\n"
+                "• [bold #00ff9d]/memory save[/bold #00ff9d] - Save with auto-generated name\n"
+                "• [bold #00ff9d]/memory show M001[/bold #00ff9d] - Inspect memory by ID\n"
+                "• [bold #00ff9d]/memory apply M001 P1[/bold #00ff9d] - Apply a memory to agent P1\n"
+                "• [bold #00ff9d]/memory delete M001[/bold #00ff9d] - Delete memory by ID\n"
+                "• [bold #00ff9d]/memory compact red_teamer[/bold #00ff9d] - Compact a single agent\n"
+                "• [bold #00ff9d]/memory remove M001 red_teamer[/bold #00ff9d] - Remove one memory from agent\n"
+                "• [bold #00ff9d]/memory clear red_teamer[/bold #00ff9d] - Clear all memories from agent\n"
+                "• [bold #00ff9d]/memory list-applied[/bold #00ff9d] - Show all applied memories\n\n"
+                f"[bold {z}]Recommended flow:[/bold {z}]\n"
+                "• 1. Select/use an agent (e.g. /agent red_teamer)\n"
+                "• 2. Send at least one normal prompt (non-command)\n"
+                "• 3. Run /memory save <name>\n"
+                "• 4. Use /memory list and /memory show to verify\n"
+                "• 5. Apply with /memory apply when needed\n\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
+                "• If '/memory save' reports no history, send a prompt first\n"
+                "• Memory IDs (e.g., M001) are the safest way to reference memories\n"
+                "• Use '/memory status' to see what is currently applied\n\n"
+                "[dim]Alias: /mem[/dim]",
+                title=_quick_guide_subpanel_title("Memory Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
         return True
 
     def handle_agent(self, _: Optional[List[str]] = None) -> bool:
         """Show help for agent management."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Agent Management Commands[/bold]\n\n"
-                "Agents are autonomous AI assistants specialized for different tasks.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/agent list[/yellow] - List all available agents\n"
-                "• [yellow]/agent select <name>[/yellow] - Switch to a specific agent\n"
-                "• [yellow]/agent info <name>[/yellow] - Show agent details and tools\n"
-                "• [yellow]/agent multi[/yellow] - Enable multi-agent mode\n"
-                "• [yellow]/agent current[/yellow] - Show current agent configuration\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/agent list[/green] - See all available agents\n"
-                "• [green]/agent select red_teamer[/green] - Switch to offensive security agent\n"
-                "• [green]/agent info bug_bounter[/green] - View bug bounty agent details\n"
-                "• [green]/a select 2[/green] - Select agent by number (using alias)\n\n"
-                "[bold]Available Agents:[/bold]\n"
-                "• [cyan]one_tool_agent[/cyan] - Basic CTF solver\n"
-                "• [cyan]red_teamer[/cyan] - Offensive security specialist\n"
-                "• [cyan]blue_teamer[/cyan] - Defensive security specialist\n"
-                "• [cyan]bug_bounter[/cyan] - Bug bounty hunter\n"
-                "• [cyan]dfir[/cyan] - Digital forensics & incident response\n"
-                "• [cyan]network_traffic_analyzer[/cyan] - Network analysis\n"
-                "• [cyan]flag_discriminator[/cyan] - CTF flag extraction\n"
-                "• [cyan]codeagent[/cyan] - Code generation and analysis\n"
-                "• [cyan]thought[/cyan] - Strategic planning\n\n"
+                _h_panel_desc(
+                    "Agents are autonomous AI assistants. Default CLI entry is "
+                    "[bold]selection_agent[/bold] (handoff-only router); "
+                    "[bold]orchestration_agent[/bold] [bold white on bright_red] BETA [/] adds "
+                    "breadth-first routing with specialist tools. "
+                    "See [bold]/help var CAI_AGENT_TYPE[/bold] and [bold]/help var CAI_ORCHESTRATION_*[/bold]."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/agent list[/bold #00ff9d] - List all available agents\n"
+                "• [bold #00ff9d]/agent select <name>[/bold #00ff9d] - Switch to a specific agent\n"
+                "• [bold #00ff9d]/agent info <name>[/bold #00ff9d] - Show agent details and tools\n"
+                "• [bold #00ff9d]/agent current[/bold #00ff9d] - Show current agent configuration\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/agent list[/bold #00ff9d] - See all available agents\n"
+                "• [bold #00ff9d]/agent select [/bold #00ff9d][red]red_teamer[/red]"
+                " [dim]- Switch to offensive security agent[/dim]\n"
+                "• [bold #00ff9d]/agent info [/bold #00ff9d][red]bug_bounter[/red]"
+                " [dim]- View bug bounty agent details[/dim]\n"
+                "• [bold #00ff9d]/a select [/bold #00ff9d][red]2[/red] [dim]- Select agent by number (alias)[/dim]\n\n"
+                f"[bold {z}]Available agents:[/bold {z}]\n"
+                "• [bold #00ff9d]selection_agent[/bold #00ff9d] - Default entry: handoff-only router "
+                "(no orchestration specialist tools)\n"
+                "• [bold #00ff9d]orchestration_agent[/bold #00ff9d] [bold white on bright_red] BETA [/] - "
+                "Routing plus [bold]run_specialist[/bold], dual contest, and "
+                "[bold]run_parallel_specialists[/bold] "
+                "(tune workers with [bold]CAI_ORCHESTRATION_WORKER_MAX_TURNS[/bold]; optional multi-front "
+                "nudge: [bold]CAI_ORCHESTRATION_MAS_HINT[/bold])\n"
+                "• [bold #00ff9d]one_tool_agent[/bold #00ff9d] - Basic CTF solver\n"
+                "• [bold #00ff9d]red_teamer[/bold #00ff9d] - Offensive security specialist\n"
+                "• [bold #00ff9d]blue_teamer[/bold #00ff9d] - Defensive security specialist\n"
+                "• [bold #00ff9d]bug_bounter[/bold #00ff9d] - Bug bounty hunter\n"
+                "• [bold #00ff9d]dfir[/bold #00ff9d] - Digital forensics & incident response\n"
+                "• [bold #00ff9d]network_traffic_analyzer[/bold #00ff9d] - Network analysis\n"
+                "• [bold #00ff9d]flag_discriminator[/bold #00ff9d] - CTF flag extraction\n"
+                "• [bold #00ff9d]codeagent[/bold #00ff9d] - Code generation and analysis\n"
+                "• [bold #00ff9d]thought[/bold #00ff9d] - Strategic planning\n\n"
                 "[dim]Alias: /a[/dim]",
-                title="Agent Commands",
-                border_style="blue",
+                title=_quick_guide_subpanel_title("Agent Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_context(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for context usage breakdown."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Context usage: inspect where tokens are going (per-role estimates and heavy messages). "
+                    "Useful for diagnosing fast token growth and deciding when to compact."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/context[/bold #00ff9d] - Show per-role context estimate (system/user/assistant/tool)\n"
+                "• [bold #00ff9d]/context top[/bold #00ff9d] - Show biggest messages by estimated tokens (default 8)\n"
+                "• [bold #00ff9d]/context top 20[/bold #00ff9d] - Show top 20 heavy messages\n\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
+                "• Estimates count message role+content only; system prompts and tool schemas add extra overhead\n"
+                "• Provider tokenization can differ from local estimates depending on the model\n\n"
+                "[dim]Alias: /ctx[/dim]",
+                title=_quick_guide_subpanel_title("Context Usage"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
@@ -161,121 +429,123 @@ class HelpCommand(Command):
         """Show help for graph visualization."""
         console.print(
             Panel(
-                "[bold]Graph Visualization Commands[/bold]\n\n"
-                "Visualize agent conversation history with multi-agent support.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/graph[/yellow] - Show graph (single or all agents)\n"
-                "• [yellow]/graph P1[/yellow] - Show graph for agent by ID\n"
-                "• [yellow]/graph <agent_name>[/yellow] - Show graph for specific agent\n"
-                "• [yellow]/graph all[/yellow] - Show graphs for all agents\n"
-                "• [yellow]/graph timeline[/yellow] - Unified timeline of all agents\n"
-                "• [yellow]/graph stats[/yellow] - Detailed conversation statistics\n"
-                "• [yellow]/graph export <format>[/yellow] - Export data (json, dot, mermaid)\n\n"
-                "[bold cyan]Features:[/bold cyan]\n"
-                "• Multi-agent visualization in parallel mode\n"
-                "• User messages and agent responses\n"
-                "• Tool call highlighting\n"
-                "• Timeline view for chronological analysis\n"
-                "• Statistical insights across agents\n"
-                "• Export to multiple formats\n\n"
-                "[bold green]Examples:[/bold green]\n"
-                "• [green]/graph[/green] - Display current graph\n"
-                "• [green]/graph P2[/green] - Show graph for agent P2\n"
-                "• [green]/graph red_teamer[/green] - Show red_teamer's graph\n"
-                "• [green]/graph timeline[/green] - View timeline\n"
-                "• [green]/graph stats[/green] - See statistics\n"
-                "• [green]/graph export mermaid graph.md[/green] - Export Mermaid\n"
-                "• [green]/g timeline[/green] - Using alias\n\n"
-                "[bold]Export Formats:[/bold]\n"
-                "• [cyan]json[/cyan] - Complete conversation data\n"
-                "• [cyan]dot[/cyan] - Graphviz DOT format\n"
-                "• [cyan]mermaid[/cyan] - Mermaid diagram format\n\n"
-                "[dim]Alias: /g[/dim]",
-                title="Graph Commands",
-                border_style="blue",
-            )
-        )
-        return True
-
-    def handle_platform(self, _: Optional[List[str]] = None) -> bool:
-        """Show help for platform-specific features."""
-        platform_cmd = next((cmd for cmd in COMMANDS.values() if cmd.name == "/platform"), None)
-
-        if platform_cmd and hasattr(platform_cmd, "show_help"):
-            platform_cmd.show_help()
-            return True
-
-        console.print(
-            Panel(
-                "Platform commands provide access to platform-specific "
-                "features.\n\n"
-                "[bold]Available Commands:[/bold]\n"
-                "• [yellow]/platform list[/yellow] - List available platforms\n"
-                "• [yellow]/platform <platform> <command>[/yellow] - Run "
-                "platform-specific command\n\n"
-                "[bold]Examples:[/bold]\n"
-                "• [green]/platform list[/green] - Show all available platforms\n"
-                "• [green]/p list[/green] - Shorthand for platform list",
-                title="Platform Commands",
-                border_style="blue",
+                graph_help_panel_markup(),
+                title=_quick_guide_subpanel_title("Graph Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_shell(self, _: Optional[List[str]] = None) -> bool:
         """Show help for shell command execution."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "Shell commands allow you to execute system commands directly.\n\n"
-                "[bold]Available Commands:[/bold]\n"
-                "• [yellow]/shell <command>[/yellow] - Execute a shell command\n"
-                "• [yellow]/![/yellow] - Shorthand for /shell\n\n"
-                "[bold]Session Management:[/bold]\n"
-                "• [yellow]/shell session list[/yellow] - List active sessions\n"
-                "• [yellow]/shell session output <id>[/yellow] - Get output from "
-                "a session\n"
-                "• [yellow]/shell session kill <id>[/yellow] - Terminate a "
-                "session\n\n"
-                "[bold]Examples:[/bold]\n"
-                "• [green]/shell ls -la[/green] - List files in current "
-                "directory\n"
-                "• [green]/! pwd[/green] - Show current working directory",
-                title="Shell Commands",
-                border_style="blue",
+                _h_panel_desc(
+                    "Shell: run commands in the workspace cwd, or in the container when "
+                    "CAI_ACTIVE_CONTAINER is set."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/shell <command>[/bold #00ff9d] - Execute a shell command\n\n"
+                f"[bold {z}]Aliases:[/bold {z}]\n"
+                "• [bold #00ff9d]/s[/bold #00ff9d], [bold #00ff9d]$[/bold #00ff9d] - Shorthand for /shell\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/shell ls -la[/bold #00ff9d] [dim]- List files[/dim]\n"
+                "• [bold #00ff9d]/s pwd[/bold #00ff9d] [dim]- Show current directory[/dim]\n"
+                "• [bold #00ff9d]$ git status[/bold #00ff9d] [dim]- Git status[/dim]",
+                title=_quick_guide_subpanel_title("Shell Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_env(self, _: Optional[List[str]] = None) -> bool:
         """Show help for environment variables."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "Environment variables control CAI's behavior.\n\n"
-                "[bold]Key Variables:[/bold]\n"
-                "• [yellow]CAI_MODEL[/yellow] - Default AI model (e.g., "
-                "'claude-3-7-sonnet-20250219')\n"
-                "• [yellow]CAI_<AGENT>_MODEL[/yellow] - Agent-specific model "
-                "(e.g., CAI_REDTEAM_AGENT_MODEL)\n"
-                "• [yellow]CAI_MEMORY_DIR[/yellow] - Directory for storing memory "
-                "collections\n\n"
-                "[bold]API Keys:[/bold]\n"
-                "Set API keys as environment variables following the pattern:\n"
-                "• [yellow]PROVIDER_API_KEY[/yellow] - Where PROVIDER is your model provider\n\n"
-                "Examples:\n"
-                "• [yellow]export OPENAI_API_KEY='your-key'[/yellow]\n"
-                "• [yellow]export ANTHROPIC_API_KEY='your-key'[/yellow]\n"
-                "• [yellow]export YOUR_PROVIDER_API_KEY='your-key'[/yellow]\n\n"
-                "[bold]Available Commands:[/bold]\n"
-                "• [yellow]/env list[/yellow] - Show all environment variables\n"
-                "• [yellow]/env set <n> <value>[/yellow] - Set an environment "
-                "variable\n"
-                "• [yellow]/env get <n>[/yellow] - Get the value of an "
-                "environment variable",
-                title="Environment Variables",
-                border_style="blue",
+                _h_panel_desc(
+                    "Environment: session keys and full catalog use the same tables as bare /help."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/env[/bold #00ff9d] — "
+                "only [dim]CAI_[/dim] / [dim]CTF_[/dim] keys currently set in the process "
+                "(same as before)\n"
+                "• [bold #00ff9d]/env list[/bold #00ff9d] — "
+                "every catalog variable (#, current, default, values, when, description)\n"
+                "• [bold #00ff9d]/env get <n|NAME>[/bold #00ff9d] — show one catalog entry\n"
+                "• [bold #00ff9d]/env set <n|NAME> <value>[/bold #00ff9d] — set by number or "
+                "name (value may include spaces; no quotes)\n"
+                "• [bold #00ff9d]/env default[/bold #00ff9d] — restore all catalog variables to "
+                "registered defaults\n\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
+                "• Example catalog entry: [bold]CAI_MODEL[/bold] ([bold]/env list[/bold], "
+                "[bold]/help var CAI_MODEL[/bold]).\n"
+                "• Bare [bold]/help[/bold] still includes the full environment reference tables.\n\n"
+                "[dim]Alias: /e[/dim]",
+                title=_quick_guide_subpanel_title("Environment Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
+
+    def handle_var(self, args: Optional[List[str]] = None) -> bool:
+        """Long-form help for one or more environment variables."""
+        from cai.repl.commands.env_var_help import example_cyan_line, usage_markup_bold, render_variable_help
+        from cai.repl.ui.banner import environment_reference_outer_title
+
+        if not args or not any(a.strip() for a in args):
+            console.print(
+                Panel(
+                    Text.from_markup(
+                        _h_panel_desc(
+                            "Long-form rows for one catalog variable (full tables stay on bare /help)."
+                        )
+                        + f"{usage_markup_bold()}  [dim](one or more names)[/dim]\n\n"
+                        "Detailed help for a single variable from the tables under "
+                        "[bold]/help[/bold]: "
+                        "type, when it applies, default, and copy-paste examples.\n\n"
+                        "[bold]Examples[/bold]\n"
+                        f"{example_cyan_line('CAI_MODEL')}\n"
+                        f"{example_cyan_line('CAI_DEBUG')}\n\n"
+                        "[dim]All documented variables (including former “Additional”) are in the /env catalog.[/dim]"
+                    ),
+                    title=environment_reference_outer_title(),
+                    title_align="left",
+                    border_style=_CAI_GREEN,
+                    padding=(1, 1),
+                )
+            )
+            return True
+
+        all_ok = True
+        for token in args:
+            raw = token.strip()
+            if not raw:
+                continue
+            ok, canonical, body = render_variable_help(raw)
+            if not ok:
+                all_ok = False
+            title_text = _quick_guide_subpanel_title(
+                f"Variable — {canonical}" if ok else f"Unknown — {canonical}"
+            )
+            style = _CAI_GREEN if ok else "red"
+            console.print(
+                Panel(
+                    Text.from_markup(body),
+                    title=title_text,
+                    title_align="left",
+                    border_style=style,
+                    padding=(1, 1),
+                )
+            )
+        return all_ok
 
     def handle_aliases(self, _: Optional[List[str]] = None) -> bool:
         """Show all command aliases."""
@@ -283,39 +553,52 @@ class HelpCommand(Command):
 
     def handle_model(self, _: Optional[List[str]] = None) -> bool:
         """Show help for model selection."""
-        return self.handle_help_model()
-
-    def handle_turns(self, _: Optional[List[str]] = None) -> bool:
-        """Show help for managing turns."""
-        return self.handle_help_turns()
+        console.print(
+            Panel(
+                Text.from_markup(model_help_panel_markup(), overflow="fold"),
+                title=_quick_guide_subpanel_title("Model Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
 
     def handle_config(self, _: Optional[List[str]] = None) -> bool:
-        """Display help for config commands.
-
-        Args:
-            _: Ignored arguments
-
-        Returns:
-            True if successful
-        """
-        return self.handle_help_config()
+        """Legacy ``/help config`` — deprecation notice only (use ``/env``)."""
+        print_config_deprecated_message(console)
+        return True
 
     def handle_no_args(self) -> bool:
-        """Handle the command when no arguments are provided."""
-        return self.handle_help()
+        """Show the full quick guide (startup scaffolding panel; on demand only)."""
+        from cai.repl.commands.environment_reference import print_environment_reference
+        from cai.repl.ui.banner import display_quick_guide
+
+        display_quick_guide(console)
+        console.print()
+        print_environment_reference(console)
+        return True
 
     def _print_command_table(
         self,
         title: str,
         commands: List[tuple[str, str, str]],
-        header_style: str = "bold yellow",
-        command_style: str = "yellow",
+        header_style: str | None = None,
+        command_style: str | None = None,
+        alias_column: str = "Alias",
     ) -> None:
         """Print a table of commands with consistent formatting."""
+        z = _CAI_GREEN
+        hs = header_style if header_style is not None else f"bold {z}"
+        cs = command_style if command_style is not None else f"bold {z}"
         table = create_styled_table(
             title,
-            [("Command", command_style), ("Alias", "green"), ("Description", "white")],
-            header_style,
+            [
+                ("Command", cs),
+                (alias_column, "#9aa0a6"),
+                ("Description", "white"),
+            ],
+            hs,
         )
 
         for cmd, alias, desc in commands:
@@ -323,103 +606,44 @@ class HelpCommand(Command):
 
         console.print(table)
 
-    def handle_help(self) -> bool:
-        """Display general help information.
+    def handle_help_topics(self, _: Optional[List[str]] = None) -> bool:
+        """Topic index: intro, categorized commands, tips (no environment-variable tables)."""
+        from cai.repl.ui.banner import display_help_topics_index
 
-        Returns:
-            True if successful
-        """
-        console.print(
-            Panel(
-                Text.from_markup(
-                    "[bold]Welcome to CAI (Cybersecurity AI)[/bold]\n\n"
-                    "CAI is a powerful AI-driven security framework for penetration testing, "
-                    "bug bounty hunting, and security research.\n\n"
-                    "REMINDER: This is a work in progress. Please report any issues or feedback to the developer.\n"
-                    "[yellow]For detailed help on any topic, use:[/yellow] [bold]/help <topic>[/bold]\n"
-                    "[yellow]For a quick reference guide, use:[/yellow] [bold]/help quick[/bold]\n"
-                    "[yellow]To see all commands, use:[/yellow] [bold]/help commands[/bold]"
-                ),
-                title="🔒 CAI Help System",
-                border_style="yellow",
-            )
-        )
-
-        # Command Categories
-        categories = [
-            ("[bold yellow]Agent Management[/bold yellow]", [
-                ("[cyan]/agent[/cyan]", "Manage and switch between agents"),
-                ("[cyan]/parallel[/cyan]", "Configure parallel agent execution"),
-                ("[cyan]/run[/cyan]", "Queue prompts for execution"),
-            ]),
-            ("[bold green]Memory & History[/bold green]", [
-                ("[cyan]/memory[/cyan]", "Persistent memory management"),
-                ("[cyan]/history[/cyan]", "View conversation history"),
-                ("[cyan]/compact[/cyan]", "Compact conversations with AI"),
-                ("[cyan]/flush[/cyan]", "Clear agent histories"),
-                ("[cyan]/load[/cyan]", "Load JSONL conversation files"),
-                ("[cyan]/merge[/cyan]", "Merge agent histories"),
-            ]),
-            ("[bold blue]Environment & Config[/bold blue]", [
-                ("[cyan]/config[/cyan]", "Manage environment variables"),
-                ("[cyan]/env[/cyan]", "Display current environment"),
-                ("[cyan]/workspace[/cyan]", "Manage working directories"),
-                ("[cyan]/virtualization[/cyan]", "Docker container management"),
-            ]),
-            ("[bold magenta]Tools & Integration[/bold magenta]", [
-                ("[cyan]/mcp[/cyan]", "Model Context Protocol servers"),
-                ("[cyan]/platform[/cyan]", "Platform-specific features"),
-                ("[cyan]/shell[/cyan]", "Execute shell commands"),
-            ]),
-            ("[bold red]Utilities[/bold red]", [
-                ("[cyan]/model[/cyan]", "Change AI models"),
-                ("[cyan]/graph[/cyan]", "Visualize agent interactions"),
-                ("[cyan]/kill[/cyan]", "Terminate active processes"),
-                ("[cyan]/exit[/cyan]", "Exit CAI"),
-            ]),
-        ]
-
-        for category_name, commands in categories:
-            console.print(f"\n{category_name}")
-            table = Table(show_header=False, box=None, padding=(0, 2))
-            table.add_column(style="cyan", width=25)
-            table.add_column(style="white")
-            for cmd, desc in commands:
-                table.add_row(f"  {cmd}", desc)
-            console.print(table)
-
-        # Quick Tips
-        tips = Panel(
-            Text.from_markup(
-                "[bold]Quick Tips:[/bold]\n"
-                "• Use [bold cyan]Tab[/bold cyan] for command completion\n"
-                "• Use [bold cyan]↑/↓[/bold cyan] to navigate command history\n"
-                "• Use [bold cyan]Ctrl+C[/bold cyan] to interrupt running commands\n"
-                "• Use [bold cyan]Ctrl+L[/bold cyan] to clear the screen\n"
-                "• Most commands have aliases (e.g., [yellow]/h[/yellow] for [yellow]/help[/yellow])\n"
-                "• Type [yellow]/help <command>[/yellow] for detailed command help"
-            ),
-            title="💡 Tips",
-            border_style="cyan",
-        )
-        console.print("\n")
-        console.print(tips)
-
+        display_help_topics_index(console)
         return True
+
+    def handle_help(self) -> bool:
+        """Same output as bare ``/help``: two-column quick guide + env reference."""
+        return self.handle_no_args()
 
     def handle_help_aliases(self) -> bool:
         """Show all command aliases in a well-formatted table."""
-        # Create a styled header
-        console.print(Panel("Command Aliases Reference", border_style="magenta", title="Aliases"))
-
-        # Create a table for aliases
-        alias_table = create_styled_table(
-            "Command Aliases",
-            [("Alias", "green"), ("Command", "yellow"), ("Description", "white")],
-            "bold magenta",
+        z = _CAI_GREEN
+        accent = f"bold {z}"
+        intro = (
+            f"[bold]Command Aliases[/bold]"
+        )
+        console.print(
+            Panel(
+                Text.from_markup(intro, overflow="fold"),
+                title=_quick_guide_subpanel_title("Aliases"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
         )
 
-        # Add rows for each alias
+        alias_table = create_styled_table(
+            None,
+            [
+                ("Alias", accent),
+                ("Command", accent),
+                ("Description", "white"),
+            ],
+            accent,
+        )
+
         for alias, command in sorted(COMMAND_ALIASES.items()):
             cmd = COMMANDS.get(command)
             description = cmd.description if cmd else ""
@@ -427,780 +651,720 @@ class HelpCommand(Command):
 
         console.print(alias_table)
 
-        # Add tips
         tips = [
-            "Aliases can be used anywhere the full command would be used",
-            ("Example: [green]/m list[/green] instead of [yellow]/memory list[/yellow]"),
+            "Use the alias as the first token of the line, same as the full command name.",
+            (
+                f"Example: [bold {z}]/a list[/bold {z}] for [bold {z}]/agent list[/bold {z}], or "
+                f"[bold {z}]/mem list[/bold {z}] for [bold {z}]/memory list[/bold {z}]."
+            ),
+            "[dim]Shell: `$` only works at the start of the line (same routing rule as `/`).[/dim]",
         ]
         console.print("\n")
-        console.print(create_notes_panel(tips, "Tips", "cyan"))
-
-        return True
-
-    def handle_help_memory(self) -> bool:
-        """Show help for memory commands with rich formatting."""
-        # Create a styled header
-        header = Text("Memory Command Help", style="bold yellow")
-        console.print(Panel(header, border_style="yellow"))
-
-        # Usage table
-        usage_table = create_styled_table(
-            "Usage", [("Command", "yellow"), ("Description", "white")]
-        )
-
-        usage_table.add_row("/memory list", "Display all available memory collections")
-        usage_table.add_row("/memory load <collection>", "Set the active memory collection")
-        usage_table.add_row("/memory delete <collection>", "Delete a memory collection")
-        usage_table.add_row("/memory create <collection>", "Create a new memory collection")
-        usage_table.add_row("/m", "Alias for /memory")
-
-        console.print(usage_table)
-
-        # Examples table
-        examples_table = create_styled_table(
-            "Examples", [("Example", "cyan"), ("Description", "white")], "bold cyan"
-        )
-
-        examples = [
-            ("/memory list", "List all available collections"),
-            ("/memory load _all_", "Load the semantic memory collection"),
-            ("/memory load my_ctf", "Load the episodic memory for 'my_ctf'"),
-            ("/memory create new_collection", "Create a new collection named 'new_collection'"),
-            ("/memory delete old_collection", "Delete the collection named 'old_collection'"),
-        ]
-
-        for example, desc in examples:
-            examples_table.add_row(example, desc)
-
-        console.print(examples_table)
-
-        # Collection types table
-        types_table = create_styled_table(
-            "Collection Types", [("Type", "green"), ("Description", "white")], "bold green"
-        )
-
-        types = [
-            ("_all_", "Semantic memory across all CTFs"),
-            ("<CTF_NAME>", "Episodic memory for a specific CTF"),
-            ("<custom_name>", "Custom memory collection"),
-        ]
-
-        for type_name, desc in types:
-            types_table.add_row(type_name, desc)
-
-        console.print(types_table)
-
-        # Notes panel
-        notes = [
-            "Memory collections are stored in the Qdrant vector database",
-            "The active collection is stored in the CAI_MEMORY_COLLECTION env var",
-            "Episodic memory is used for specific CTFs or tasks",
-            "Semantic memory (_all_) is used across all CTFs",
-            "Memory is used to provide context to the agent",
-        ]
-
-        console.print(create_notes_panel(notes))
-
-        return True
-
-    def handle_help_model(self) -> bool:
-        """Show help for model command with rich formatting."""
-        # Create a styled header
-        header = Text("Model Command Help", style="bold magenta")
-        console.print(Panel(header, border_style="magenta"))
-
-        # Usage table
-        usage_table = create_styled_table(
-            "Usage", [("Command", "magenta"), ("Description", "white")]
-        )
-
-        usage_commands = [
-            ("/model", "Display current model and list available models"),
-            ("/model <model_name>", "Change the model to <model_name>"),
-            ("/model <number>", "Change the model using its number from the list"),
-            ("/mod", "Alias for /model"),
-        ]
-
-        for cmd, desc in usage_commands:
-            usage_table.add_row(cmd, desc)
-
-        console.print(usage_table)
-
-        # Examples table
-        examples_table = create_styled_table(
-            "Examples", [("Example", "cyan"), ("Description", "white")], "bold cyan"
-        )
-
-        examples = [
-            ("/model 1", "Switch to the first model in the list (Claude 3.7 Sonnet)"),
-            ("/model claude-3-7-sonnet-20250219", "Switch to Claude 3.7 Sonnet model"),
-            ("/model o1", "Switch to OpenAI's O1 model (good for math)"),
-            ("/model gpt-4o", "Switch to OpenAI's GPT-4o model"),
-        ]
-
-        for example, desc in examples:
-            examples_table.add_row(example, desc)
-
-        console.print(examples_table)
-
-        # Model information
-        console.print("\n[bold green]Model Information:[/bold green]\n")
-        console.print("CAI supports hundreds of models through various providers.")
-        console.print("Use [yellow]/model[/yellow] to see available models for your configured API keys.")
-        console.print("\nModel categories include:")
-        console.print("• Fast inference models for quick responses")
-        console.print("• Reasoning models for complex analysis")
-        console.print("• Code-specialized models for development")
-        console.print("• Local models via Ollama")
-        console.print("• Multi-provider access through aggregators")
-
-        # Notes panel
-        notes = [
-            "The model change takes effect on the next agent interaction",
-            "The model is stored in the CAI_MODEL environment variable",
-            "Each provider requires its API key following the pattern: PROVIDER_API_KEY",
-            "Use /config to see which API keys are configured",
-            "Use /quickstart to check your API key setup",
-            "Local models via Ollama require local installation",
-        ]
-
-        console.print(create_notes_panel(notes))
-
-        return True
-
-    def handle_help_turns(self) -> bool:
-        """Show help for turns command with rich formatting."""
-        # Create a styled header
-        header = Text("Turns Command Help", style="bold magenta")
-        console.print(Panel(header, border_style="magenta"))
-
-        # Usage table
-        usage_table = create_styled_table(
-            "Usage", [("Command", "magenta"), ("Description", "white")]
-        )
-
-        usage_commands = [
-            ("/turns", "Display current maximum number of turns"),
-            ("/turns <number>", "Change the maximum number of turns"),
-            ("/turns inf", "Set unlimited turns"),
-            ("/t", "Alias for /turns"),
-        ]
-
-        for cmd, desc in usage_commands:
-            usage_table.add_row(cmd, desc)
-
-        console.print(usage_table)
-
-        # Examples table
-        examples_table = create_styled_table(
-            "Examples", [("Example", "cyan"), ("Description", "white")], "bold cyan"
-        )
-
-        examples = [
-            ("/turns", "Show current maximum turns"),
-            ("/turns 10", "Set maximum turns to 10"),
-            ("/turns inf", "Set unlimited turns"),
-            ("/t 5", "Set maximum turns to 5 (using alias)"),
-        ]
-
-        for example, desc in examples:
-            examples_table.add_row(example, desc)
-
-        console.print(examples_table)
-
-        # Notes panel
-        notes = [
-            ("The maximum turns limit controls how many responses the agent will give"),
-            "Setting turns to 'inf' allows unlimited responses",
-            ("The turns count is stored in the CAI_MAX_TURNS environment variable"),
-            "Each agent response counts as one turn",
-        ]
-
-        console.print(create_notes_panel(notes))
-
-        return True
-
-    def handle_help_platform_manager(self) -> bool:
-        """Show help for platform manager commands."""
-        if HAS_PLATFORM_EXTENSIONS and is_caiextensions_platform_available():
-            try:
-                from caiextensions.platform.base import platform_manager
-
-                platforms = platform_manager.list_platforms()
-
-                if not platforms:
-                    console.print("[yellow]No platforms registered.[/yellow]")
-                    return True
-
-                platform_table = create_styled_table(
-                    "Available Platforms",
-                    [("Platform", "magenta"), ("Description", "white")],
-                    "bold magenta",
-                )
-
-                for platform_name in platforms:
-                    platform = platform_manager.get_platform(platform_name)
-                    description = getattr(platform, "description", platform_name.capitalize())
-                    platform_table.add_row(platform_name, description)
-
-                console.print(platform_table)
-
-                # Add platform command examples
-                examples = []
-                for platform_name in platforms:
-                    platform = platform_manager.get_platform(platform_name)
-                    commands = platform.get_commands()
-                    if commands:
-                        command_example = f"[green]/platform {platform_name} {commands[0]}[/green] - Example {platform_name} command"
-                        examples.append(command_example)
-
-                if examples:
-                    console.print(
-                        Panel(
-                            "\n".join(examples),
-                            title="Platform Command Examples",
-                            border_style="blue",
-                        )
-                    )
-
-                return True
-            except (ImportError, Exception) as e:
-                console.print(f"[yellow]Error loading platforms: {e}[/yellow]")
-                return True
-
-        console.print("[yellow]No platform extensions available.[/yellow]")
-        return True
-
-    def handle_help_config(self) -> bool:
-        """Display help for config commands.
-
-        Returns:
-            True if successful
-        """
-        console.print(
-            Panel(
-                Text.from_markup(
-                    "The [bold yellow]/config[/bold yellow] command allows you "
-                    "to view and configure environment variables that control "
-                    "the behavior of CAI."
-                ),
-                title="Config Commands",
-                border_style="yellow",
-            )
-        )
-
-        # Create table for subcommands
-        table = create_styled_table(
-            "Available Subcommands", [("Command", "yellow"), ("Description", "white")]
-        )
-
-        table.add_row("/config", "List all environment variables and their current values")
-        table.add_row("/config list", "List all environment variables and their current values")
-        table.add_row(
-            "/config get <number>", "Get the value of a specific environment variable by its number"
-        )
-        table.add_row(
-            "/config set <number> <value>",
-            "Set the value of a specific environment variable by its number",
-        )
-
-        console.print(table)
-
-        # Create notes panel
-        notes = [
-            "Environment variables control various aspects of CAI behavior.",
-            "Changes environment variables only affect the current session.",
-            "Use the [yellow]/config list[/yellow] command to see options.",
-            "Each variable is assigned a number for easy reference.",
-        ]
-        console.print(create_notes_panel(notes))
+        console.print(create_notes_panel(tips, "Tips"))
 
         return True
 
     def handle_parallel(self, _: Optional[List[str]] = None) -> bool:
         """Show help for parallel execution."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Parallel Agent Execution[/bold]\n\n"
-                "Run multiple agents concurrently for collaborative problem-solving.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/parallel[/yellow] - Show current configuration\n"
-                "• [yellow]/parallel add <agent>[/yellow] - Add agent to parallel config\n"
-                "• [yellow]/parallel list[/yellow] - List configured agents\n"
-                "• [yellow]/parallel clear[/yellow] - Clear all configurations\n"
-                "• [yellow]/parallel remove <index>[/yellow] - Remove specific agent\n"
-                "• [yellow]/parallel override-models[/yellow] - Use global model for all\n"
-                "• [yellow]/parallel merge <indices>[/yellow] - Merge agent histories\n"
-                "• [yellow]/parallel prompt <index> <text>[/yellow] - Set custom prompt\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/parallel add red_teamer[/green] - Add red team agent\n"
-                "• [green]/parallel add bug_bounter custom_prompt=\"Find SQLi\"[/green]\n"
-                "• [green]/parallel merge 1,2[/green] - Merge histories of P1 and P2\n"
-                "• [green]/p list[/green] - Show all configured agents\n\n"
-                "[bold]Notes:[/bold]\n"
+                _h_panel_desc(
+                    "Parallel execution: run several agents at once with isolated histories, then merge."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/parallel[/bold #00ff9d] - Show current configuration\n"
+                "• [bold #00ff9d]/parallel add <agent>[/bold #00ff9d] - Add agent to parallel config\n"
+                "• [bold #00ff9d]/parallel run[/bold #00ff9d] - Execute configured parallel agents\n"
+                "• [bold #00ff9d]/parallel list[/bold #00ff9d] - List configured agents\n"
+                "• [bold #00ff9d]/parallel clear[/bold #00ff9d] - Clear all configurations\n"
+                "• [bold #00ff9d]/parallel remove <index>[/bold #00ff9d] - Remove specific agent\n"
+                "• [bold #00ff9d]/parallel override-models[/bold #00ff9d] - Use global model for all\n"
+                "• [bold #00ff9d]/parallel merge <indices>[/bold #00ff9d] - Merge agent histories\n"
+                "• [bold #00ff9d]/parallel prompt <index> <text>[/bold #00ff9d] - Set custom prompt\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/parallel add red_teamer[/bold #00ff9d] - Add red team agent\n"
+                "• [bold #00ff9d]/parallel prompt P1 Analyze service exposure[/bold #00ff9d]\n"
+                "• [bold #00ff9d]/parallel run[/bold #00ff9d] - Execute configured parallel agents\n"
+                "• [bold #00ff9d]/merge[/bold #00ff9d] - Merge and auto-exit parallel mode\n"
+                "• [bold #00ff9d]/p list[/bold #00ff9d] - Show all configured agents\n\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
                 "• Agents run independently with isolated contexts\n"
                 "• Each agent gets a unique ID (P1, P2, etc.)\n"
                 "• Results are displayed side-by-side\n"
+                "• /merge merges all parallel agent contexts and exits parallel mode\n"
+                "• /parallel clear exits parallel mode without merging contexts\n"
+                "• /parallel add <agent> --model alias1 sets a custom model\n"
                 "• Use CAI_PARALLEL env var to set default count\n\n"
                 "[dim]Aliases: /par, /p[/dim]",
-                title="Parallel Execution",
-                border_style="blue",
+                title=_quick_guide_subpanel_title("Parallel Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
-    def handle_run(self, _: Optional[List[str]] = None) -> bool:
-        """Show help for queued execution."""
+    def handle_queue(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for queue commands."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Queued Prompt Execution[/bold]\n\n"
-                "Queue prompts for agents in parallel mode.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/run queue <agent_id> <prompt>[/yellow] - Queue a prompt\n"
-                "• [yellow]/run list[/yellow] - List all queued prompts\n"
-                "• [yellow]/run clear[/yellow] - Clear all queued prompts\n"
-                "• [yellow]/run remove <index>[/yellow] - Remove specific prompt\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/run queue P1 \"Scan port 80\"[/green] - Queue for agent P1\n"
-                "• [green]/run queue P2 \"Check for SQL injection\"[/green]\n"
-                "• [green]/run list[/green] - See all queued prompts\n"
-                "• [green]/r clear[/green] - Clear the queue\n\n"
-                "[bold]Notes:[/bold]\n"
-                "• Only available in parallel mode\n"
-                "• Prompts execute when you send a message\n"
-                "• Each agent processes its queue independently\n\n"
-                "[dim]Alias: /r[/dim]",
-                title="Run Queue Commands",
-                border_style="green",
+                _h_panel_desc("Queue: line up prompts for sequential runs on the active or chosen agent.")
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/queue or /queue show[/bold #00ff9d] - Show queue status\n"
+                "• [bold #00ff9d]/queue add <prompt>[/bold #00ff9d] - Queue a prompt (active agent)\n"
+                "• [bold #00ff9d]/queue add --agent <name> <prompt>[/bold #00ff9d] - Queue with specific agent\n"
+                "• [bold #00ff9d]/queue list[/bold #00ff9d] - List queued prompts\n"
+                "• [bold #00ff9d]/queue clear[/bold #00ff9d] - Clear queued prompts\n"
+                "• [bold #00ff9d]/queue remove <index>[/bold #00ff9d] - Remove one queued prompt\n"
+                "• [bold #00ff9d]/queue move <from> <to>[/bold #00ff9d] - Move prompt to new position\n"
+                "• [bold #00ff9d]/queue next[/bold #00ff9d] - Show the next prompt in queue\n"
+                "• [bold #00ff9d]/queue load <file>[/bold #00ff9d] - Load prompts from file\n"
+                "• [bold #00ff9d]/queue run[/bold #00ff9d] - Execute all queued prompts\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                '• [bold #00ff9d]/queue add Analyze this target service[/bold #00ff9d]\n'
+                "• [bold #00ff9d]/queue add --agent red_teamer scan target[/bold #00ff9d]\n"
+                "• [bold #00ff9d]/queue move 3 1[/bold #00ff9d] - Move item #3 to position #1\n"
+                "• [bold #00ff9d]/queue clear[/bold #00ff9d] - Clear the queue\n"
+                "• [bold #00ff9d]/queue load prompts.txt[/bold #00ff9d] - Load prompts from file\n\n"
+                "[dim]Alias: /que[/dim]",
+                title=_quick_guide_subpanel_title("Queue Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_history(self, _: Optional[List[str]] = None) -> bool:
         """Show help for conversation history."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Conversation History Management[/bold]\n\n"
-                "View and manage agent conversation histories.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/history[/yellow] - Show control panel for all agents\n"
-                "• [yellow]/history all[/yellow] - Display all agent histories\n"
-                "• [yellow]/history <agent>[/yellow] - Show specific agent history\n"
-                "• [yellow]/history search <term>[/yellow] - Search in histories\n"
-                "• [yellow]/history <agent> <index>[/yellow] - Show specific message\n"
-                "• [yellow]/history export <file>[/yellow] - Export to JSON\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/history[/green] - View control panel\n"
-                "• [green]/history P1[/green] - Show P1's conversation\n"
-                "• [green]/history search \"password\"[/green] - Search for term\n"
-                "• [green]/his red_teamer 5[/green] - Show message #5\n\n"
-                "[bold]Features:[/bold]\n"
-                "• Token count and cost tracking\n"
-                "• Message role visualization\n"
+                _h_panel_desc(
+                    "History: browse, search, and drill into per-agent transcripts and parallel slots."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/history[/bold #00ff9d] - Show control panel (tree view of agents)\n"
+                "• [bold #00ff9d]/history all[/bold #00ff9d] - Display all agent histories chronologically\n"
+                "• [bold #00ff9d]/history <agent>[/bold #00ff9d] or [bold #00ff9d]/history <ID>[/bold #00ff9d]"
+                " - Show specific agent history\n"
+                "• [bold #00ff9d]/history agent <name>[/bold #00ff9d] - Show history by agent name\n"
+                "• [bold #00ff9d]/history search <term>[/bold #00ff9d] - Search messages across all agents\n"
+                "• [bold #00ff9d]/history index <agent> <index> [role][/bold #00ff9d]"
+                " - Show specific message by index\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/history[/bold #00ff9d] - View agent control panel\n"
+                "• [bold #00ff9d]/history P1[/bold #00ff9d] - Show P1's conversation\n"
+                "• [bold #00ff9d]/history agent red_teamer[/bold #00ff9d] - Show red_teamer's history\n"
+                '• [bold #00ff9d]/history search "password"[/bold #00ff9d] - Search for term\n'
+                "• [bold #00ff9d]/history index red_teamer 5[/bold #00ff9d] - Show message #5\n"
+                "• [bold #00ff9d]/history index P1 3 user[/bold #00ff9d] - Show 3rd user message from P1\n\n"
+                f"[bold {z}]Features:[/bold {z}]\n"
+                "• Message count and role breakdown per agent\n"
+                "• Message role visualization (color-coded)\n"
                 "• Tool call details\n"
-                "• Export for analysis\n\n"
+                "• Use [bold #00ff9d]/save <file>.jsonl[/bold #00ff9d] for snapshots ([bold #00ff9d]/load[/bold #00ff9d]); "
+                "[bold #00ff9d].md[/bold #00ff9d] for readable exports\n"
+                "• Memory status indicator\n"
+                "• Parallel agent support (isolated histories)\n\n"
                 "[dim]Alias: /his[/dim]",
-                title="History Commands",
-                border_style="magenta",
+                title=_quick_guide_subpanel_title("History Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_compact(self, _: Optional[List[str]] = None) -> bool:
         """Show help for conversation compaction."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Conversation Compaction[/bold]\n\n"
-                "Use AI to summarize and compact long conversations.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/compact[/yellow] - Compact current conversation\n"
-                "• [yellow]/compact model <name>[/yellow] - Set compaction model\n"
-                "• [yellow]/compact prompt <text>[/yellow] - Set custom prompt\n"
-                "• [yellow]/compact status[/yellow] - Show current settings\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/compact[/green] - Compact with default settings\n"
-                "• [green]/compact model o3-mini[/green] - Use O3 Mini model\n"
-                "• [green]/compact prompt \"Focus on vulnerabilities\"[/green]\n"
-                "• [green]/cmp status[/green] - Check configuration\n\n"
-                "[bold]Features:[/bold]\n"
+                _h_panel_desc(
+                    "Compaction: use a summarization model to shrink long threads and free context."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/compact[/bold #00ff9d] - Compact current conversation\n"
+                "• [bold #00ff9d]/compact model <name>[/bold #00ff9d] - Set compaction model by name\n"
+                "• [bold #00ff9d]/compact model <number>[/bold #00ff9d] - Set compaction model by table number\n"
+                "• [bold #00ff9d]/compact model default[/bold #00ff9d] - Reset to current agent model\n"
+                "• [bold #00ff9d]/compact prompt <text>[/bold #00ff9d] - Set custom summarization prompt\n"
+                "• [bold #00ff9d]/compact prompt reset[/bold #00ff9d] - Reset to default prompt\n"
+                "• [bold #00ff9d]/compact status[/bold #00ff9d] - Show current settings\n\n"
+                f"[bold {z}]Inline flags (one-time override):[/bold {z}]\n"
+                "• [bold #00ff9d]/compact --model <model>[/bold #00ff9d] - Compact with a specific model\n"
+                "• [bold #00ff9d]/compact --prompt <text>[/bold #00ff9d] - Compact with a custom prompt\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/compact model o3-mini[/bold #00ff9d] - Set O3 Mini as compaction model\n"
+                "• [bold #00ff9d]/compact model 3[/bold #00ff9d] - Set model by number from table\n"
+                "• [bold #00ff9d]/compact model default[/bold #00ff9d] - Use current agent model\n"
+                '• [bold #00ff9d]/compact prompt "Focus on vulnerabilities"[/bold #00ff9d] - Set custom prompt\n'
+                "• [bold #00ff9d]/compact prompt reset[/bold #00ff9d] - Reset to default prompt\n"
+                "• [bold #00ff9d]/cmp status[/bold #00ff9d] - Check configuration\n"
+                "• [bold #00ff9d]/compact --model o3-mini[/bold #00ff9d] - One-time compaction with specific model\n"
+                '• [bold #00ff9d]/compact --prompt "Focus on credentials"[/bold #00ff9d] - One-time custom prompt\n\n'
+                f"[bold {z}]Features:[/bold {z}]\n"
                 "• Preserves important context\n"
                 "• Reduces token usage\n"
                 "• Saves to memory (M-prefixed)\n"
                 "• Clears history after compaction\n\n"
                 "[dim]Alias: /cmp[/dim]",
-                title="Compact Commands",
-                border_style="yellow",
+                title=_quick_guide_subpanel_title("Compact Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_flush(self, _: Optional[List[str]] = None) -> bool:
         """Show help for clearing histories."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Clear Conversation Histories[/bold]\n\n"
-                "Remove message histories and reset contexts.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/flush[/yellow] - Clear current agent's history\n"
-                "• [yellow]/flush all[/yellow] - Clear all agent histories\n"
-                "• [yellow]/flush <agent>[/yellow] - Clear specific agent\n"
-                "• [yellow]/flush P1[/yellow] - Clear parallel agent P1\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/flush[/green] - Clear active agent\n"
-                "• [green]/flush all[/green] - Reset all agents\n"
-                "• [green]/flush red_teamer[/green] - Clear red team agent\n"
-                "• [green]/clear P2[/green] - Clear parallel agent P2\n\n"
-                "[bold]Effects:[/bold]\n"
+                _h_panel_desc(
+                    "Flush: drop stored messages while keeping agents, tools, and MCP as configured."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/flush[/bold #00ff9d] - Clear current agent's history\n"
+                "• [bold #00ff9d]/flush all[/bold #00ff9d] - Clear all agent histories\n"
+                "• [bold #00ff9d]/flush <agent>[/bold #00ff9d] - Clear specific agent\n"
+                "• [bold #00ff9d]/flush P1[/bold #00ff9d] - Clear parallel agent P1\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/flush[/bold #00ff9d] - Clear active agent\n"
+                "• [bold #00ff9d]/flush all[/bold #00ff9d] - Reset all agents\n"
+                "• [bold #00ff9d]/flush red_teamer[/bold #00ff9d] - Clear red team agent\n"
+                "• [bold #00ff9d]/clear P2[/bold #00ff9d] - Clear parallel agent P2\n\n"
+                f"[bold {z}]Effects:[/bold {z}]\n"
                 "• Removes all messages\n"
                 "• Resets token counts\n"
                 "• Preserves agent configuration\n"
                 "• Keeps MCP connections\n\n"
                 "[dim]Alias: /clear[/dim]",
-                title="Flush Commands",
-                border_style="red",
+                title=_quick_guide_subpanel_title("Flush Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_load(self, _: Optional[List[str]] = None) -> bool:
         """Show help for loading JSONL files."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Load JSONL Conversation Files[/bold]\n\n"
-                "Import conversation histories from JSONL files.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/load <file>[/yellow] - Load for current agent\n"
-                "• [yellow]/load <file> agent <name>[/yellow] - Load for specific agent\n"
-                "• [yellow]/load <file> all[/yellow] - Distribute across all agents\n"
-                "• [yellow]/load <file> parallel[/yellow] - Smart parallel distribution\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/load session.jsonl[/green] - Load to current agent\n"
-                "• [green]/load ctf.jsonl agent red_teamer[/green] - Load to red team\n"
-                "• [green]/load scan.jsonl all[/green] - Split across agents\n"
-                "• [green]/l pentest.jsonl parallel[/green] - Pattern-based loading\n\n"
-                "[bold]Distribution Modes:[/bold]\n"
-                "• [cyan]agent[/cyan] - Load all to one agent\n"
-                "• [cyan]all[/cyan] - Round-robin distribution\n"
-                "• [cyan]parallel[/cyan] - Match by agent patterns\n\n"
+                _h_panel_desc("Load JSONL transcripts from /save (or elsewhere) back into agents.")
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/load <file>[/bold #00ff9d] - Load for current agent\n"
+                "• [bold #00ff9d]/load <file> agent <name>[/bold #00ff9d] - Load for specific agent\n"
+                "• [bold #00ff9d]/load <file> all[/bold #00ff9d] - Distribute across all agents\n"
+                "• [bold #00ff9d]/load <file> parallel[/bold #00ff9d] - Smart parallel distribution\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/load session.jsonl[/bold #00ff9d] - Load to current agent ([dim]use .jsonl from /save, not .md[/dim])\n"
+                "• [bold #00ff9d]/load ctf.jsonl agent red_teamer[/bold #00ff9d] - Load to red team\n"
+                "• [bold #00ff9d]/load scan.jsonl all[/bold #00ff9d] - Split across agents\n"
+                "• [bold #00ff9d]/l pentest.jsonl parallel[/bold #00ff9d] - Pattern-based loading\n\n"
+                "Use [bold #00ff9d]/save file.jsonl[/bold #00ff9d] to reload with [bold #00ff9d]/load[/bold #00ff9d]; "
+                "[bold #00ff9d].md[/bold #00ff9d] exports are readable only (not for /load).\n"
+                "[dim]/history export[/dim] is deprecated; use [bold #00ff9d]/save[/bold #00ff9d].\n\n"
+                f"[bold {z}]Distribution modes:[/bold {z}]\n"
+                "• [bold #00ff9d]agent[/bold #00ff9d] - Load all to one agent\n"
+                "• [bold #00ff9d]all[/bold #00ff9d] - Round-robin distribution\n"
+                "• [bold #00ff9d]parallel[/bold #00ff9d] - Match by agent patterns\n\n"
                 "[dim]Alias: /l[/dim]",
-                title="Load Commands",
-                border_style="green",
+                title=_quick_guide_subpanel_title("Load Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_save(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for saving conversation JSONL or Markdown."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Save: export JSONL for /load or Markdown for humans; use after /flush to archive safely."
+                )
+                + f"[bold {z}]Formats:[/bold {z}]\n"
+                "• [bold #00ff9d].jsonl[/bold #00ff9d] — machine format, one JSON object per line "
+                "([dim]agent, role, content[/dim], tool fields). Use with [bold]/load[/bold].\n"
+                "• [bold #00ff9d].md[/bold #00ff9d] or [bold #00ff9d].markdown[/bold #00ff9d] — human-readable "
+                "report (headings per agent and role). Not loaded by [bold]/load[/bold].\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/save session.jsonl[/bold #00ff9d]\n"
+                "• [bold #00ff9d]/save findings.md[/bold #00ff9d]\n"
+                "• [bold #00ff9d]/save ~/notes/cai_thread.jsonl[/bold #00ff9d]\n\n"
+                "Tilde paths ([bold]~/...[/bold]) are expanded; parent directories are created if needed.\n"
+                "Not the same as [bold]/memory save[/bold] (summarized memory under [dim].cai/memory[/dim]).\n\n"
+                "[dim]Deprecated: /history export — use /save instead.[/dim]",
+                title=_quick_guide_subpanel_title("Save Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_workspace(self, _: Optional[List[str]] = None) -> bool:
         """Show help for workspace management."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Workspace Management[/bold]\n\n"
-                "Manage working directories and project spaces.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/workspace set <name>[/yellow] - Set workspace name\n"
-                "• [yellow]/workspace get[/yellow] - Show current workspace\n"
-                "• [yellow]/workspace ls[/yellow] - List workspace files\n"
-                "• [yellow]/workspace exec <cmd>[/yellow] - Execute in workspace\n"
-                "• [yellow]/workspace copy <src> <dst>[/yellow] - Copy files (container)\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/workspace set project1[/green] - Create project1 workspace\n"
-                "• [green]/workspace ls[/green] - List workspace contents\n"
-                "• [green]/ws exec make build[/green] - Run command in workspace\n"
-                "• [green]/ws copy /tmp/scan.txt .[/green] - Copy to workspace\n\n"
-                "[bold]Features:[/bold]\n"
-                "• Auto-creates directories\n"
-                "• Container-aware operations\n"
-                "• Integrates with logging\n"
-                "• Environment variable: CAI_WORKSPACE\n\n"
+                _h_panel_desc(
+                    "Workspace labels and paths for CAI_WORKSPACE; bare /workspace or /workspace get shows status."
+                )
+                + f"[bold {z}]Subcommands[/bold {z}] ([dim]alias[/dim] [bold #00ff9d]/ws[/bold #00ff9d])\n"
+                "• [bold #00ff9d]/workspace set <name>[/bold #00ff9d] — set workspace label\n"
+                "• [bold #00ff9d]/workspace get[/bold #00ff9d] — same as bare [bold]/ws[/bold]\n"
+                "• [bold #00ff9d]/workspace ls[/bold #00ff9d] [dim](optional path in workspace)[/dim] — list files\n"
+                "• [bold #00ff9d]/workspace exec <cmd>[/bold #00ff9d] — run a shell command in the workspace cwd\n"
+                "• [bold #00ff9d]/workspace copy <src> <dst>[/bold #00ff9d] — host ↔ container via [bold]docker cp[/bold]; "
+                "[bold]container:[/bold] on exactly one path; needs [dim]CAI_ACTIVE_CONTAINER[/dim] "
+                "([dim]/h virtualization[/dim])\n\n"
+                "[dim]Host base path:[/dim] [dim]CAI_WORKSPACE_DIR[/dim]\n\n"
                 "[dim]Alias: /ws[/dim]",
-                title="Workspace Commands",
-                border_style="cyan",
+                title=_quick_guide_subpanel_title("Workspace Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_virtualization(self, _: Optional[List[str]] = None) -> bool:
         """Show help for Docker container management."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Docker Container Management[/bold]\n\n"
-                "Run security tools in isolated Docker environments.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/virtualization pull <image>[/yellow] - Pull Docker image\n"
-                "• [yellow]/virtualization run <image>[/yellow] - Run container\n"
-                "• [yellow]/virtualization run <container_id>[/yellow] - Activate existing\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/virt pull kalilinux/kali-rolling[/green] - Pull Kali\n"
-                "• [green]/virt run parrotsec/security[/green] - Run Parrot OS\n"
-                "• [green]/virt run abc123[/green] - Activate container abc123\n\n"
-                "[bold]Supported Images:[/bold]\n"
-                "• [cyan]kalilinux/kali-rolling[/cyan] - Kali Linux\n"
-                "• [cyan]parrotsec/security[/cyan] - Parrot Security\n"
-                "• [cyan]Any security-focused image[/cyan]\n\n"
-                "[bold]Features:[/bold]\n"
+                _h_panel_desc(
+                    "Virtualization: attach CAI to Docker containers for isolated security tool runs."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/virtualization[/bold #00ff9d] or [bold #00ff9d]/virtualization info[/bold #00ff9d] — full status (alias [bold #00ff9d]/virt[/bold #00ff9d])\n"
+                "• [bold #00ff9d]/virtualization list[/bold #00ff9d] - List Docker containers\n"
+                "• [bold #00ff9d]/virtualization set <container_id>[/bold #00ff9d] - Set active container (prefix if unique)\n"
+                "• [bold #00ff9d]/virtualization clear[/bold #00ff9d] - Return to host\n"
+                "• [bold #00ff9d]/virtualization pull <image>[/bold #00ff9d] - Pull Docker image\n"
+                "• [bold #00ff9d]/virtualization run <image|id>[/bold #00ff9d] - New container from image, or activate if <id> matches one container prefix\n"
+                "• [bold #00ff9d]/virtualization <image_or_pen_id>[/bold #00ff9d] - Switch (same as bare shortcut)\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/virt pull kalilinux/kali-rolling[/bold #00ff9d] - Pull Kali\n"
+                "• [bold #00ff9d]/virt run parrotsec/security[/bold #00ff9d] - Run Parrot OS\n"
+                "• [bold #00ff9d]/virt set abc123def456[/bold #00ff9d] - Activate container by ID\n"
+                "• [bold #00ff9d]/virt abc123def456[/bold #00ff9d] - Same (bare shortcut)\n\n"
+                f"[bold {z}]Supported images:[/bold {z}]\n"
+                "• [bold #00ff9d]kalilinux/kali-rolling[/bold #00ff9d] - Kali Linux\n"
+                "• [bold #00ff9d]parrotsec/security[/bold #00ff9d] - Parrot Security\n"
+                "• [bold #00ff9d]Any security-focused image[/bold #00ff9d]\n\n"
+                f"[bold {z}]Features:[/bold {z}]\n"
                 "• Host networking enabled\n"
                 "• Workspace mounting\n"
                 "• Interactive TTY\n"
-                "• Sets CAI_ACTIVE_CONTAINER\n\n"
-                "[dim]Alias: /virt[/dim]",
-                title="Virtualization Commands",
-                border_style="blue",
+                "• Sets CAI_ACTIVE_CONTAINER\n\n",
+                title=_quick_guide_subpanel_title("Virtualization Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_mcp(self, _: Optional[List[str]] = None) -> bool:
         """Show help for Model Context Protocol."""
+        from cai.repl.commands.mcp import mcp_help_panel_markup
+
         console.print(
             Panel(
-                "[bold]Model Context Protocol (MCP)[/bold]\n\n"
-                "Connect external tool servers to enhance agent capabilities.\n\n"
-                "[bold yellow]Available Commands:[/bold yellow]\n"
-                "• [yellow]/mcp load <type> <config>[/yellow] - Load MCP server\n"
-                "• [yellow]/mcp list[/yellow] - List active servers\n"
-                "• [yellow]/mcp add <server> <agent>[/yellow] - Add tools to agent\n"
-                "• [yellow]/mcp remove <server>[/yellow] - Remove server\n"
-                "• [yellow]/mcp tools <server>[/yellow] - List server tools\n"
-                "• [yellow]/mcp status[/yellow] - Check connection status\n"
-                "• [yellow]/mcp associations[/yellow] - Show agent mappings\n"
-                "• [yellow]/mcp test <server>[/yellow] - Test connectivity\n\n"
-                "[bold cyan]Server Types:[/bold cyan]\n"
-                "• [green]sse[/green] - Server-Sent Events (HTTP)\n"
-                "• [green]stdio[/green] - Standard I/O (Process)\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/mcp load sse http://localhost:3000[/green]\n"
-                "• [green]/mcp load stdio \"npx @modelcontextprotocol/server-sqlite\"[/green]\n"
-                "• [green]/mcp add filesystem red_teamer[/green]\n"
-                "• [green]/mcp tools filesystem[/green]\n\n"
-                "[bold]Notes:[/bold]\n"
-                "• Fresh connections per tool call\n"
-                "• Auto-discovery of tools\n"
-                "• Supports custom headers\n\n"
-                "[dim]Alias: /m[/dim]",
-                title="MCP Commands",
-                border_style="magenta",
+                mcp_help_panel_markup(),
+                title=_quick_guide_subpanel_title("MCP Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
-    def handle_kill(self, _: Optional[List[str]] = None) -> bool:
-        """Show help for process management."""
+    def handle_cost(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for cost tracking."""
         console.print(
             Panel(
-                "[bold]Process Management[/bold]\n\n"
-                "Terminate active processes and clean up sessions.\n\n"
-                "[bold yellow]Usage:[/bold yellow]\n"
-                "• [yellow]/kill[/yellow] - Kill all active processes\n\n"
-                "[bold]What it terminates:[/bold]\n"
-                "• SSH sessions\n"
-                "• Container processes\n"
-                "• Background commands\n"
-                "• Hanging connections\n\n"
-                "[bold cyan]Example:[/bold cyan]\n"
-                "• [green]/kill[/green] - Clean up all processes\n"
-                "• [green]/k[/green] - Using the alias\n\n"
-                "[bold]Use when:[/bold]\n"
-                "• Commands are stuck\n"
-                "• Need to reset connections\n"
-                "• Before switching environments\n\n"
-                "[dim]Alias: /k[/dim]",
-                title="Kill Command",
-                border_style="red",
+                cost_help_panel_markup(),
+                title=_quick_guide_subpanel_title("Cost Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_exit(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for exiting CAI."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Leave the REPL: session is tidied up and a short summary is shown "
+                    "(same path as Ctrl+C)."
+                )
+                + f"[bold {z}]Command:[/bold {z}]\n"
+                f"• [bold {z}]/exit[/bold {z}] — quit CAI\n\n"
+                f"[bold {z}]Aliases:[/bold {z}] [dim]/q, /quit[/dim]\n\n"
+                f"[bold {z}]Also:[/bold {z}] [dim]Ctrl+C at the prompt[/dim]\n",
+                title=_quick_guide_subpanel_title("Exit Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_resume(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for session resume."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Resume replaces the old ``cai --resume`` / ``--logpath`` flags: pick a log, "
+                    "replay it, then load history into the active agent."
+                )
+                + f"[bold {z}]Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/resume[/bold #00ff9d] — same [bold #00ff9d]10[/bold #00ff9d] recent sessions as "
+                "[bold #00ff9d]/sessions[/bold #00ff9d]; enter a number to load one\n"
+                "• [bold #00ff9d]/resume last[/bold #00ff9d] — newest log under [dim]logs/[/dim] with messages\n"
+                "• [bold #00ff9d]/resume <file.jsonl>[/bold #00ff9d] — load that capture\n"
+                "• [bold #00ff9d]/resume <dir>[/bold #00ff9d] — pick among up to 10 newest [dim].jsonl[/dim] under "
+                "[dim]dir[/dim] (recursive)\n"
+                "• [bold #00ff9d]/resume <dir> <token>[/bold #00ff9d] — newest [dim].jsonl[/dim] under "
+                "[dim]dir[/dim] whose name contains [dim]token[/dim]\n"
+                "• [bold #00ff9d]/resume <token>[/bold #00ff9d] — match in [dim]logs/cai_*.jsonl[/dim] filenames "
+                "(not a path)\n\n"
+                f"[bold {z}]Related:[/bold {z}]\n"
+                "• [bold #00ff9d]/sessions[/bold #00ff9d], [bold #00ff9d]/sessions <n>[/bold #00ff9d]\n\n"
+                "[dim]Alias: /r[/dim]",
+                title=_quick_guide_subpanel_title("Resume Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_sessions(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for session listing."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Sessions: browse on-disk JSONL logs. Default list matches the first step of "
+                    "[bold #00ff9d]/resume[/bold #00ff9d] (10 newest with messages)."
+                )
+                + f"[bold {z}]Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/sessions[/bold #00ff9d] — last [bold #00ff9d]10[/bold #00ff9d] sessions "
+                "([dim]logs/cai_*.jsonl[/dim])\n"
+                "• [bold #00ff9d]/sessions <n>[/bold #00ff9d] — last [dim]n[/dim] sessions\n"
+                "• [bold #00ff9d]/sessions <id|path>[/bold #00ff9d] — metadata for one log\n\n"
+                f"[bold {z}]Related:[/bold {z}]\n"
+                "• [bold #00ff9d]/resume[/bold #00ff9d] — pick and replay into the agent\n\n"
+                "[dim]Alias: /sess[/dim]",
+                title=_quick_guide_subpanel_title("Sessions Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_replay(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for session replay."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc("Replay a JSONL capture with optional delay; stop from TUI if needed.")
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/replay <file.jsonl>[/bold #00ff9d] - Replay a conversation\n"
+                "• [bold #00ff9d]/replay <file.jsonl> <delay>[/bold #00ff9d] - Replay with custom delay\n"
+                "• [bold #00ff9d]/replay stop[/bold #00ff9d] - Cancel active replay (TUI)\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/replay session.jsonl[/bold #00ff9d] - Replay at default speed\n"
+                "• [bold #00ff9d]/replay session.jsonl 2[/bold #00ff9d] - 2s delay between steps\n"
+                "• [bold #00ff9d]/replay stop[/bold #00ff9d] - Stop current replay\n\n"
+                f"[bold {z}]Features:[/bold {z}]\n"
+                "• Shows user prompts, assistant panels, and tool outputs\n"
+                "• Live step-by-step playback\n"
+                "• Session recording is disabled during replay",
+                title=_quick_guide_subpanel_title("Replay Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_continue(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for continuation mode."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Continuation mode: let the agent keep working turn-by-turn until you turn it off."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/continue[/bold #00ff9d] - Enable and continue current task\n"
+                "• [bold #00ff9d]/continue on[/bold #00ff9d] - Enable continuation mode\n"
+                "• [bold #00ff9d]/continue off[/bold #00ff9d] - Disable continuation mode\n"
+                "• [bold #00ff9d]/continue status[/bold #00ff9d] - Check current mode status\n\n"
+                f"[bold {z}]How it works:[/bold {z}]\n"
+                "• When enabled, the agent automatically continues\n"
+                "  working on the current task after each response\n"
+                "• Useful for long-running multi-step tasks\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/continue[/bold #00ff9d] - Start continuing\n"
+                "• [bold #00ff9d]/continue off[/bold #00ff9d] - Stop auto-continuation",
+                title=_quick_guide_subpanel_title("Continue Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_temperature(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for ``/temperature`` (matches command: no subcommands, optional value)."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Sampling temperature (0.0–2.0). Bare command shows the current value; "
+                    "with a number it sets [bold]CAI_TEMPERATURE[/bold] and the active REPL agent's "
+                    "model_settings for the next turn."
+                )
+                + f"[bold {z}]Syntax[/bold {z}]\n"
+                f"• [bold {z}]/temperature[/bold {z}] [dim]— show current[/dim]\n"
+                f"• [bold {z}]/temperature <value>[/bold {z}] [dim]— set a float in 0.0–2.0[/dim]\n\n"
+                f"[dim]Env: CAI_TEMPERATURE. Some models may ignore or clamp the parameter.[/dim]\n\n"
+                "[dim]Alias: /temp[/dim]",
+                title=_quick_guide_subpanel_title("Temperature"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_topp(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for ``/topp`` (matches command: no subcommands, optional value)."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Nucleus sampling top_p (0.0–1.0). Bare command shows the current value; "
+                    "with a number it sets [bold]CAI_TOP_P[/bold] and the active REPL agent's "
+                    "model_settings for the next turn."
+                )
+                + f"[bold {z}]Syntax[/bold {z}]\n"
+                f"• [bold {z}]/topp[/bold {z}] [dim]— show current[/dim]\n"
+                f"• [bold {z}]/topp <value>[/bold {z}] [dim]— set a float in 0.0–1.0[/dim]\n\n"
+                f"[bold {z}]Value guide:[/bold {z}]\n"
+                "• [bold #00ff9d]0.1[/bold #00ff9d] - Very narrow (top 10% probability mass)\n"
+                "• [bold #00ff9d]0.5[/bold #00ff9d] - Moderate (top 50%)\n"
+                "• [bold #00ff9d]1.0[/bold #00ff9d] - Default (consider all tokens)\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/topp 0.5[/bold #00ff9d] - More focused sampling\n"
+                "• [bold #00ff9d]/topp 1.0[/bold #00ff9d] - Default behavior\n\n"
+                f"[dim]Env: CAI_TOP_P. Some models may ignore or clamp the parameter.[/dim]",
+                title=_quick_guide_subpanel_title("Top-P"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_settings(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for interactive settings."""
+        z = _CAI_GREEN
+        subs = settings_help_panel_subcommand_bullets()
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "Settings: edit .env variables, FAQ, API checks, language, and Ollama."
+                )
+                + f"[bold {z}]Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/settings[/bold #00ff9d] - Interactive menu\n"
+                f"{subs}\n\n"
+                "[dim]Alias: /set[/dim]",
+                title=_quick_guide_subpanel_title("Settings"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_auth(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for API authentication."""
+        console.print(
+            Panel(
+                auth_help_panel_markup(),
+                title=_quick_guide_subpanel_title("Auth Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_ctr(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for CTR security analysis."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "CTR: game-theoretic analysis on the session; artifacts under run_* folders "
+                    "(base directory or one nested level, same discovery for list/show/graph/use)."
+                )
+                + f"[bold {z}]Commands:[/bold {z}]\n"
+                f"• [bold {z}]/ctr[/bold {z}] — run full analysis\n"
+                f"• [bold {z}]/ctr show[/bold {z}] — print equilibrium and strategies\n"
+                f"• [bold {z}]/ctr graph[/bold {z}] — open graph image; node/edge summary when data exists\n"
+                f"• [bold {z}]/ctr list[/bold {z}] — list runs (newest first; # matches [bold {z}]/ctr use <n>[/bold {z}])\n"
+                f"• [bold {z}]/ctr use[/bold {z}] — [dim]list index[/dim], [dim]run folder name under base[/dim], "
+                f"or [dim]absolute path[/dim]\n"
+                f"• [bold {z}]/ctr open[/bold {z}] — open the runs folder in the file manager\n\n"
+                f"[dim]Example: [bold {z}]/ctr[/bold {z}] then [bold {z}]/ctr list[/bold {z}] and [bold {z}]/ctr use 1[/bold {z}][/dim]",
+                title=_quick_guide_subpanel_title("CTR Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_api(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for /api (ALIAS_API_KEY in .env)."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc(
+                    "ALIAS_API_KEY for Alias-hosted models (CAI PRO). "
+                    "Show reads .env first, then the process environment if unset in the file; "
+                    "masked display matches the CLI startup hint (first 4 … last 4 when the key is longer than 10 characters)."
+                )
+                + f"[bold {z}]Commands:[/bold {z}]\n"
+                f"• [bold {z}]/api[/bold {z}] — show masked ALIAS_API_KEY\n"
+                f"• [bold {z}]/api show[/bold {z}] — same as bare [bold {z}]/api[/bold {z}]\n"
+                f"• [bold {z}]/api set <key>[/bold {z}] — write [bold {z}].env[/bold {z}] and update "
+                f"[bold {z}]os.environ[/bold {z}] for this process\n"
+                f"• [bold {z}]/api <key>[/bold {z}] — shorthand for [bold {z}]set[/bold {z}] when the "
+                f"first token is not [bold {z}]show[/bold {z}] or [bold {z}]set[/bold {z}]\n\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
+                f"• Alias: [bold {z}]/apikey[/bold {z}] (same handlers as [bold {z}]/api[/bold {z}])\n"
+                f"• Other provider keys: [bold {z}]/env[/bold {z}], [bold {z}]/settings[/bold {z}]\n"
+                f"• HTTP API server (FastAPI) may use [bold {z}]CAI_API_KEY[/bold {z}] as a fallback "
+                f"root key; see [bold {z}]docs/api.md[/bold {z}]\n\n"
+                f"[dim]Example: [bold {z}]/api show[/bold {z}] then [bold {z}]/api set[/bold {z}] "
+                f"(paste the key as the next token)[/dim]",
+                title=_quick_guide_subpanel_title("API Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
+            )
+        )
+        return True
+
+    def handle_metadebug(self, _: Optional[List[str]] = None) -> bool:
+        """Show help for meta-agent debugging."""
+        z = _CAI_GREEN
+        console.print(
+            Panel(
+                _h_panel_desc("Meta-debug: dump meta-reasoning state, routing, and agent-pick diagnostics.")
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/metadebug[/bold #00ff9d] - Show debug information\n\n"
+                f"[bold {z}]What it shows:[/bold {z}]\n"
+                "• Meta-agent reasoning state\n"
+                "• Agent selection decisions\n"
+                "• Internal routing information\n\n"
+                "[dim]Alias: /md[/dim]",
+                title=_quick_guide_subpanel_title("Metadebug Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
 
     def handle_commands(self, _: Optional[List[str]] = None) -> bool:
-        """List all available commands."""
+        """List all available commands in one panel (same layout style as other /h topics)."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]All Available Commands[/bold]",
-                title="Command Reference",
-                border_style="yellow",
+                Text.from_markup(commands_reference_panel_markup(), overflow="fold"),
+                title=_quick_guide_subpanel_title("Command Reference"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=z,
             )
         )
-
-        # Create comprehensive command table
-        all_commands = [
-            # Agent Management
-            ("Agent Management", "yellow", [
-                ("/agent", "/a", "Manage and switch agents"),
-                ("/parallel", "/par, /p", "Configure parallel execution"),
-                ("/run", "/r", "Queue prompts for agents"),
-            ]),
-            # Memory & History
-            ("Memory & History", "green", [
-                ("/memory", "/mem", "Persistent memory management"),
-                ("/history", "/his", "View conversation history"),
-                ("/compact", "/cmp", "Compact conversations"),
-                ("/flush", "/clear", "Clear histories"),
-                ("/load", "/l", "Load JSONL files"),
-                ("/merge", "/mrg", "Merge agent histories"),
-            ]),
-            # Environment & Config
-            ("Environment & Config", "blue", [
-                ("/config", "/cfg", "Manage environment variables"),
-                ("/env", "/e", "Display environment"),
-                ("/workspace", "/ws", "Manage workspaces"),
-                ("/virtualization", "/virt", "Docker containers"),
-            ]),
-            # Tools & Integration
-            ("Tools & Integration", "magenta", [
-                ("/mcp", "/m", "Model Context Protocol"),
-                ("/platform", "/p", "Platform features (conflicts with /parallel)"),
-                ("/shell", "/s, /$", "Execute shell commands"),
-            ]),
-            # Utilities
-            ("Utilities", "cyan", [
-                ("/model", "/mod", "Change AI models"),
-                ("/graph", "/g", "Visualize interactions"),
-                ("/help", "/h, /?", "Show help"),
-                ("/kill", "/k", "Terminate processes"),
-                ("/exit", "/quit, /q", "Exit CAI"),
-            ]),
-        ]
-
-        for category, color, commands in all_commands:
-            console.print(f"\n[bold {color}]{category}[/bold {color}]")
-            table = Table(show_header=True, header_style="bold")
-            table.add_column("Command", style="cyan")
-            table.add_column("Aliases", style="green")
-            table.add_column("Description", style="white")
-            
-            for cmd, aliases, desc in commands:
-                table.add_row(cmd, aliases, desc)
-            
-            console.print(table)
-
-        console.print("\n[dim]Use /help <command> for detailed information about any command.[/dim]")
-        return True
-
-    def handle_quick(self, _: Optional[List[str]] = None) -> bool:
-        """Show quick reference guide."""
-        console.print(
-            Panel(
-                "[bold]CAI Quick Reference[/bold]",
-                title="⚡ Quick Start",
-                border_style="yellow",
-            )
-        )
-
-        # Essential commands
-        console.print("\n[bold yellow]Essential Commands:[/bold yellow]")
-        quick_ref = [
-            ("[cyan]/agent list[/cyan]", "See available agents"),
-            ("[cyan]/agent select red_teamer[/cyan]", "Switch to red team agent"),
-            ("[cyan]/model gpt-4o[/cyan]", "Change to GPT-4"),
-            ("[cyan]/shell ls -la[/cyan]", "Run shell command"),
-            ("[cyan]/config[/cyan]", "View all settings"),
-            ("[cyan]/help <topic>[/cyan]", "Get detailed help"),
-        ]
-        
-        table = Table(show_header=False, box=None)
-        table.add_column(width=35)
-        table.add_column()
-        for cmd, desc in quick_ref:
-            table.add_row(f"  {cmd}", desc)
-        console.print(table)
-
-        # Common workflows
-        console.print("\n[bold green]Common Workflows:[/bold green]")
-        workflows = [
-            ("[bold]Start a CTF:[/bold]", [
-                "/agent select one_tool_agent",
-                "/workspace set ctf_name",
-                "Describe the challenge...",
-            ]),
-            ("[bold]Bug Bounty:[/bold]", [
-                "/agent select bug_bounter",
-                "/model claude-3-7-sonnet-20250219",
-                "Test https://example.com for vulnerabilities",
-            ]),
-            ("[bold]Parallel Recon:[/bold]", [
-                "/parallel add red_teamer",
-                "/parallel add network_traffic_analyzer",
-                "Scan 192.168.1.0/24",
-            ]),
-        ]
-        
-        for title, steps in workflows:
-            console.print(f"\n  {title}")
-            for step in steps:
-                console.print(f"    [green]→[/green] {step}")
-
-        # Keyboard shortcuts
-        console.print("\n[bold blue]Keyboard Shortcuts:[/bold blue]")
-        shortcuts = [
-            ("[cyan]Tab[/cyan]", "Auto-complete commands"),
-            ("[cyan]↑/↓[/cyan]", "Navigate history"),
-            ("[cyan]Ctrl+C[/cyan]", "Interrupt execution"),
-            ("[cyan]Ctrl+L[/cyan]", "Clear screen"),
-            ("[cyan]Ctrl+D[/cyan]", "Exit CAI"),
-        ]
-        
-        table = Table(show_header=False, box=None)
-        table.add_column(width=20)
-        table.add_column()
-        for key, action in shortcuts:
-            table.add_row(f"  {key}", action)
-        console.print(table)
-
-        # Pro tips
-        tips = [
-            "Most commands have short aliases (e.g., /a for /agent)",
-            "Use $ prefix for quick shell commands: $ ls",
-            "Set CAI_PARALLEL=3 to always run 3 agents",
-            "Check /mcp for external tool integration",
-        ]
-        
-        console.print("\n")
-        console.print(create_notes_panel(tips, "💡 Pro Tips", "cyan"))
-        
         return True
 
     def handle_merge_help(self, _: Optional[List[str]] = None) -> bool:
         """Show help for merge command."""
+        z = _CAI_GREEN
         console.print(
             Panel(
-                "[bold]Merge Agent Histories[/bold]\n\n"
-                "Combine message histories from multiple agents.\n\n"
-                "[bold yellow]Usage:[/bold yellow]\n"
-                "• [yellow]/merge <agents...> [options][/yellow] - Merge specified agents\n"
-                "• [yellow]/merge all [options][/yellow] - Merge all agent histories\n\n"
-                "[bold cyan]Default Behavior:[/bold cyan]\n"
+                _h_panel_desc(
+                    "Merge: fuse parallel workers into shared histories and leave parallel mode when done."
+                )
+                + f"[bold {z}]Available Commands:[/bold {z}]\n"
+                "• [bold #00ff9d]/merge <agents...> [options][/bold #00ff9d] - Merge specified agents\n"
+                "• [bold #00ff9d]/merge all [options][/bold #00ff9d] - Merge all agent histories\n\n"
+                f"[bold {z}]Default behavior:[/bold {z}]\n"
                 "Without --target, all source agents receive the complete\n"
-                "merged history (with automatic duplicate control)\n\n"
-                "[bold cyan]Options:[/bold cyan]\n"
-                "• [green]--strategy <type>[/green] - Merge strategy\n"
+                "merged history (with automatic duplicate control).\n"
+                "After a successful merge, CAI exits parallel mode automatically,\n"
+                "so you can continue using that merged context in next prompts.\n\n"
+                f"[bold {z}]Options:[/bold {z}]\n"
+                "• [bold #00ff9d]--strategy <type>[/bold #00ff9d] - Merge strategy\n"
                 "  • chronological (default) - Order by timestamp\n"
                 "  • by-agent - Group by agent\n"
                 "  • interleaved - Preserve conversation flow\n"
-                "• [green]--target <name>[/green] - Create new agent with merged history\n"
-                "• [green]--remove-sources[/green] - Remove source agents after merge\n\n"
-                "[bold cyan]Examples:[/bold cyan]\n"
-                "• [green]/merge P1 P2[/green]\n"
+                "• [bold #00ff9d]--target <name>[/bold #00ff9d] - Create new agent with merged history\n"
+                "• [bold #00ff9d]--remove-sources[/bold #00ff9d] - Remove source agents after merge\n"
+                "• [bold #00ff9d]--no-worker-summary[/bold #00ff9d] - Keep full per-worker transcripts (no AI digest)\n"
+                "• [bold #00ff9d]--summarize-workers[/bold #00ff9d] - Digest every worker, even short histories\n\n"
+                "[dim]Env: CAI_MERGE_SUMMARIZE_PER_WORKER=1 (default) enables per-worker digests "
+                "when a worker has ≥ CAI_MERGE_SUMMARIZE_MIN_MESSAGES (default 20).[/dim]\n\n"
+                f"[bold {z}]Examples:[/bold {z}]\n"
+                "• [bold #00ff9d]/merge P1 P2[/bold #00ff9d]\n"
                 "  → P1 gets P2's messages, P2 gets P1's messages\n"
-                "• [green]/merge P1 P2 --target combined[/green]\n"
+                "• [bold #00ff9d]/merge P1 P2 --target combined[/bold #00ff9d]\n"
                 "  → Creates new 'combined' agent, P1 and P2 unchanged\n"
-                "• [green]/merge all[/green]\n"
+                "• [bold #00ff9d]/merge all[/bold #00ff9d]\n"
                 "  → All agents get the complete combined history\n"
-                "• [green]/merge all --target unified --remove-sources[/green]\n"
+                "• [bold #00ff9d]/merge all --target unified --remove-sources[/bold #00ff9d]\n"
                 "  → Creates 'unified' agent and removes all others\n\n"
-                "[bold]Notes:[/bold]\n"
+                f"[bold {z}]Notes:[/bold {z}]\n"
+                "• /merge = merge contexts + exit parallel mode automatically\n"
+                "• /parallel clear = exit parallel mode without merging contexts\n"
                 "• Use agent IDs (P1, P2) or full names\n"
                 "• Agent names with spaces are auto-detected\n"
                 "• Duplicates are automatically filtered\n"
                 "• This is an alias for /parallel merge\n\n"
                 "[dim]Alias: /mrg[/dim]",
-                title="Merge Command",
-                border_style="green",
+                title=_quick_guide_subpanel_title("Merge Commands"),
+                title_align="left",
+                padding=(1, 1),
+                border_style=_CAI_GREEN,
             )
         )
         return True
-
-    def handle_quickstart(self, _: Optional[List[str]] = None) -> bool:
-        """Show quickstart guide by calling the quickstart command."""
-        from cai.repl.commands.base import handle_command
-        return handle_command("/quickstart")
 
 
 # Register the command

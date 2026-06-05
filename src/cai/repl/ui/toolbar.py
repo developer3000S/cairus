@@ -3,15 +3,17 @@ Module for the CAI REPL toolbar functionality.
 """
 import datetime
 import os
-import socket
 import platform
-import threading
-import time
-import subprocess
 import shutil
+import socket
+import subprocess
+import threading
 from functools import lru_cache
+
 import requests  # pylint: disable=import-error
 from prompt_toolkit.formatted_text import HTML  # pylint: disable=import-error
+
+from cai.config import compacted_memory_env_enabled
 
 # Variable to track when to refresh the toolbar
 toolbar_last_refresh = [datetime.datetime.now()]
@@ -130,8 +132,13 @@ def update_toolbar_in_background():
         timezone_name = datetime.datetime.now().astimezone().tzname()
         current_time_with_tz = f"{current_time} {timezone_name}"
 
-        # Get auto-compact status and context usage
-        auto_compact = os.getenv('CAI_AUTO_COMPACT', 'true').lower() == 'true'
+        # Auto-compact: prefer centralized config (matches auto_compactor / get_config)
+        try:
+            from cai.config import get_config
+
+            auto_compact = bool(get_config().auto_compact)
+        except Exception:  # pylint: disable=broad-except
+            auto_compact = os.getenv("CAI_AUTO_COMPACT", "true").lower() == "true"
         
         # Try to get context usage from environment (set by openai_chatcompletions.py)
         context_usage = 0.0
@@ -164,26 +171,26 @@ def update_toolbar_in_background():
             else:
                 auto_compact_str = "✗"
                 auto_compact_color = "ansired"
-        
-        # Get memory status
-        memory_enabled = os.getenv('CAI_MEMORY', 'false').lower() == 'true'
-        memory_str = "✓"  if memory_enabled else "✗"
+
+        # Get compacted-memory injection status (/compact summaries)
+        memory_enabled = compacted_memory_env_enabled()
+        memory_str = "✓" if memory_enabled else "✗"
         memory_color = "ansigreen" if memory_enabled else "ansigray"
-        
+
         # Get streaming status
         streaming_enabled = os.getenv('CAI_STREAM', 'false').lower() == 'true'
         stream_str = "✓" if streaming_enabled else "✗"
         stream_color = "ansigreen" if streaming_enabled else "ansigray"
-        
+
         # Get parallel agent count
         parallel_count = os.getenv('CAI_PARALLEL', '1')
         parallel_color = "ansigreen" if int(parallel_count) > 1 else "ansigray"
-        
+
         # Get tracing status
         tracing_enabled = os.getenv('CAI_TRACING', 'false').lower() == 'true'
         trace_str = "✓" if tracing_enabled else "✗"
         trace_color = "ansigreen" if tracing_enabled else "ansigray"
-        
+
         # Get terminal width to decide on toolbar format
         terminal_width = get_terminal_width()
         

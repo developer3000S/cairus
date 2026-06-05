@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from cai.sdk.agents.models import _openai_shared
@@ -9,6 +11,21 @@ from cai.sdk.agents.tracing import set_trace_processors
 from cai.sdk.agents.tracing.setup import GLOBAL_TRACE_PROVIDER
 
 from tests.testing_processor import SPAN_PROCESSOR_TESTING
+
+# Command/CLI tests often set these for isolation but omit teardown; leaked values
+# disable tracing for the rest of the session and break tracing tests.
+_CAI_ENV_RESTORE_KEYS = ("CAI_TRACING", "CAI_TELEMETRY")
+
+
+@pytest.fixture(autouse=True)
+def restore_cai_tracing_env_after_each_test():
+    snapshot = {k: os.environ[k] for k in _CAI_ENV_RESTORE_KEYS if k in os.environ}
+    missing = [k for k in _CAI_ENV_RESTORE_KEYS if k not in os.environ]
+    yield
+    for k in missing:
+        os.environ.pop(k, None)
+    for k, val in snapshot.items():
+        os.environ[k] = val
 
 
 # This fixture will run once before any tests are executed

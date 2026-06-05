@@ -19,11 +19,8 @@ import shlex
 
 @function_tool
 def run_ssh_command_with_credentials(
-        host: str,
-        username: str,
-        password: str,
-        command: str,
-        port: int = 22) -> str:
+    host: str, username: str, password: str, command: str, port: int = 22
+) -> str:
     """
     Execute a command on a remote host via SSH using password authentication.
 
@@ -37,6 +34,12 @@ def run_ssh_command_with_credentials(
     Returns:
         str: Output from the remote command execution
     """
+
+    # # Escape special characters in password and command to prevent shell injection
+    # #
+    # # NOTE: evolved into using shlex for better shell escaping
+    # escaped_password = password.replace("'", "'\\''")
+    # escaped_command = command.replace("'", "'\\''")
 
     try:
         port = int(port)
@@ -59,3 +62,8 @@ def run_ssh_command_with_credentials(
         f"{quoted_command}"
     )
     return run_command(ssh_command)
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("run_ssh_command_with_credentials", run_ssh_command_with_credentials, categories=['c2', 'lateral_movement'])

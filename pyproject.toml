@@ -1,61 +1,87 @@
 [project]
 name = "cai-framework"
-version = "0.5.10"
+version = "1.1.5"
 description = "Cybersecurity AI Framework"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "Dual-licensed MIT and Proprietary"}
 authors = [{ name = "Alias Robotics", email = "research@aliasrobotics.com" }]
 dependencies = [
-    # logging and visualization
-    "folium>=0.15.0, <1",
-    "matplotlib>=3.0, <4",
-    "numpy>=1.21, <3",
-    "pandas>=1.3, <3",
-    # core cai
-    "openai==1.75.0",
+    # --- Core (always needed) ---
+    "openai>=1.75.0",
+    "httpx>=0.27",                     # Direct HTTP for alias models [N]
     "pydantic>=2.10, <3",
-    "griffe>=1.5.6, <2",
     "typing-extensions>=4.12.2, <5",
-    "requests>=2.0, <3",
-    "types-requests>=2.0, <3",
-    "openinference-instrumentation-openai>=0.1.22",
-    "wasabi>=1.1.3",
-    "rich>=13.9.4",
+    "rich",
     "prompt_toolkit>=3.0.39",
-    "dotenv>=0.9.9",
-    "litellm[proxy]>=1.63.7",
-    "mako>=1.3.8",
-    "mcp; python_version >= '3.10'",
-    "mkdocs>=1.6.0",
-    "mkdocs-material>=9.6.0",
-    "paramiko>=3.5.1",
-    "dnspython",
-    "flask",
-    "networkx",
-    "PyPDF2",
+    "questionary>=2.0.1",
+    "python-dotenv>=0.19.0",
+    "pytz>=2024.1",                    # DataRecorder timestamps (run_to_jsonl); not always transitive
+    "PyYAML",
+    "wasabi>=1.1.3",
+    "tiktoken>=0.5",                   # Token counting
+    "mako>=1.3.8",                     # Prompt templates
+    "griffe>=1.5.6, <2",              # Function schema generation
+    # --- LLM routing (still needed for non-alias models + proxy) ---
+    "litellm[proxy]>=1.80.5",
+    # --- TUI ---
+    "textual>=0.86.0",
+    # --- Networking & Tools ---
+    "requests>=2.0, <3",
+    "paramiko>=3.5.1",                 # SSH
+    "docker",                          # Container management
+    "cryptography>=42, <44",
+    # --- Web fetch tool (fetch_url) ---
+    "trafilatura>=2.0",                # HTML -> Markdown main-content extraction
+    "curl-cffi>=0.7",                  # Anti-bot fallback (Chrome TLS fingerprint)
+    "pypdf>=4.0",                      # PDF text extraction (BSD-licensed successor of PyPDF2)
+    # --- API server ---
+    "uvicorn<=1",
+    "fastapi>=0.115.5, <1",
+    # --- Misc (used in specific modules) ---
+    "mcp",                             # Model Context Protocol
+    "nest_asyncio",                    # Async compat in sync contexts
 ]
 classifiers = [
     "Typing :: Typed",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: MIT License",
 ]
 
 [project.urls]
-Homepage = "https://github.com/openai/openai-agents-python"
-Repository = "https://github.com/openai/openai-agents-python"
+Homepage = "https://github.com/aliasrobotics/cai"
+Repository = "https://github.com/aliasrobotics/cai"
+Documentation = "https://aliasrobotics.github.io/cai/"
+Issues = "https://github.com/aliasrobotics/cai/issues"
 
 [project.optional-dependencies]
-voice = ["numpy>=2.2.0, <3; python_version>='3.10'", "websockets>=15.0, <16"]
-viz = ["graphviz>=0.17"]
+voice = ["numpy>=2.2.0", "websockets>=15.0"]
+viz = ["graphviz>=0.17", "matplotlib>=3.0,<4", "networkx", "folium>=0.15.0,<1"]
+data = ["numpy>=1.21,<3", "pandas>=1.3,<3", "scipy"]
+# CTR graph canvas in the TUI needs networkx; full CTR solver needs numpy/scipy (see data/viz).
+tui = ["networkx", "numpy>=1.21,<3", "scipy"]
+docs = ["mkdocs>=1.6.0", "mkdocs-material>=9.6.0"]
+mail = ["dnspython"]
+pdf = ["PyPDF2"]
+web = ["flask"]
+telemetry = ["openinference-instrumentation-openai>=0.1.22"]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock>=3.14.0",
+    "pytest-timeout",
+    "inline-snapshot>=0.20.7",
+    "graphviz>=0.17",
+]
+all = [
+    "cai-framework[viz,data,tui,docs,mail,pdf,web,telemetry,test]",
+]
 
 [dependency-groups]
 dev = [
@@ -76,16 +102,11 @@ dev = [
     "sounddevice",
     "textual",
     "websockets",
-    "litellm",
+    "litellm>=1.63.7",
     "prisma",
     "graphviz",
+    "nest_asyncio"
 ]
-
-[tool.uv.workspace]
-members = ["agents"]
-
-[tool.uv.sources]
-agents = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -107,14 +128,20 @@ exclude = [
     "*.egg-info/",
     "workspaces/",
     "benchmarks/",
+    "src/cai/caibench/",
     "logs/",
     "site/",
     ".cai/",
     "nohup.out",
     "ci/",
     "tools/cut_the_rope/",
+    "private/",
+    "data/",
+    "tools/license_check.py",
+    "tools/create_root_user.sh",
     "media/",
-    "docs/media/"
+    "docs/media/",
+    "docs"
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -140,8 +167,17 @@ exclude = [
     "nohup.out",
     "ci/",
     "tools/cut_the_rope/",
+    "private/",
+    "data/",
+    "tools/license_check.py",
+    "tools/create_root_user.sh",
     "media/",
-    "docs/media/"
+    "docs/media/",
+    "docs"    
+]
+# Explicitly include pricing data files
+artifacts = [
+    "src/cai/pricings/*.json"
 ]
 
 [tool.hatch.build.targets.wheel.sources]
@@ -171,8 +207,13 @@ exclude = [
     "nohup.out",
     "ci/",
     "tools/cut_the_rope/",
+    "private/",
+    "data/",
+    "tools/license_check.py",
+    "tools/create_root_user.sh",
     "media/",
-    "docs/media/"
+    "docs/media/",
+    "docs"    
 ]
 
 [tool.ruff]
@@ -230,6 +271,7 @@ filterwarnings = [
 ]
 markers = [
     "allow_call_model_methods: mark test as allowing calls to real model implementations",
+    "slow: heavier imports (e.g. full agent graph); exclude with pytest -m \"not slow\" in fast slices",
 ]
 
 [tool.inline-snapshot]
@@ -240,3 +282,5 @@ cai = "cai.cli:main"
 cai-replay = "tools.replay:main"
 cai-asciinema = "tools.asciinema:main"
 cai-gif = "tools.gif:main"
+cai-bench = "cai.caibench.cli:main"
+cai-ctr = "tools.ctr_experiment:main"

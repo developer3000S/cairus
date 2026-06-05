@@ -8,13 +8,14 @@ of the main agent by providing structured analysis without making tool calls.
 import os
 from typing import Optional, Callable, Union
 from cai.sdk.agents import Agent  # pylint: disable=import-error
+from cai.sdk.agents.model_settings import ModelSettings
 from cai.util import load_prompt_template, create_system_prompt_renderer
 
 
 def create_reasoner_agent(
     name: str = "Reasoner",
     model: Optional[str] = None,
-    instructions: Optional[Union[str, Callable[[], str]]] = None
+    instructions: Optional[Union[str, Callable[[], str]]] = None,
 ) -> Agent:
     """
     Create a Reasoner Agent for autonomous pentesting.
@@ -43,21 +44,33 @@ def create_reasoner_agent(
 
     # Use provided instructions or default
     if instructions is not None:
-        agent_instructions = instructions
+        if callable(instructions):
+            agent_instructions = instructions
+        else:
+            agent_instructions = create_system_prompt_renderer(
+                str(instructions),
+                cyber_micro_profile_key="reasoner",
+            )
     else:
-        agent_instructions = create_system_prompt_renderer(default_instructions)
+        agent_instructions = create_system_prompt_renderer(
+            default_instructions,
+            cyber_micro_profile_key="reasoner",
+        )
 
-    # Check if the model supports reasoning_effort
-    kwargs = {}
+    # Pass reasoning_effort via model_settings for o1/o3 models.
+    # ModelSettings doesn't declare reasoning_effort as a field, but
+    # openai_chatcompletions.py checks hasattr(model_settings, "reasoning_effort")
+    # so we set it dynamically.
+    model_settings = ModelSettings()
     if any(x in model for x in ["o1", "o3"]):
-        kwargs["reasoning_effort"] = "high"
+        model_settings.reasoning_effort = "high"  # type: ignore[attr-defined]
 
     # Create and return the reasoner agent
     return Agent(
         name=name,
         model=model,
         instructions=agent_instructions,
-        **kwargs
+        model_settings=model_settings,
     )
 
 

@@ -1,35 +1,50 @@
-# Example agents.yml configuration file
-# This file is auto-loaded when CAI starts
-# Copy this to agents.yml and customize for your needs
+# Example universal agents.yml configuration file (used by both CLI and TUI)
+# Copy this to agents.yml and customize for your needs.
+
+# Optional human friendly description
+description: >-
+  Preload two blue-vs-red duos. Blue teamers operate inside the container (CTF_INSIDE=true)
+  while their opposing red teams remain outside (CTF_INSIDE=false). Both teams share the
+  same investigation prompt and begin running automatically when the UI starts.
+
+# Shared defaults applied when an agent entry omits the field
+shared:
+  prompt: >-
+    Perform a coordinated assessment of the target container. Blue teamers defend from inside,
+    red teams probe externally. Exchange findings and highlight attack paths and mitigations.
+  auto_run: true
 
 parallel_agents:
-  # Each agent can have a name, optional model, optional prompt, and optional unified_context
-  - name: one_tool_agent
-    model: claude-sonnet-4-20250514
-    prompt: "Focus on finding vulnerabilities and security issues"
-    unified_context: false  # Each agent has its own message history (default)
-    
+  # Each entry represents one agent instance. Available keys:
+  #   name (required)  -> registered agent name (`cai --list-agents`)
+  #   team             -> grouping label shown in the TUI
+  #   prompt           -> overrides the shared prompt for this agent
+  #   model            -> optional model override
+  #   env              -> environment variables injected before launch
+  #   auto_run         -> whether to auto-execute the prompt on startup
+  #   unified_context  -> share history across agents in CLI parallel mode
   - name: blueteam_agent
-    model: claude-sonnet-4-20250514
-    prompt: "Focus on defensive security and mitigation strategies"
-    unified_context: false
-    
-  - name: bug_bounter_agent
-    model: alias0
-    prompt: "Search for bugs and create detailed reports"
-    unified_context: false
-
-  - name: web_pentester_agent
-    model: alias1
-    prompt: "Agent that specializes in web application penetration testing."
-    unified_context: false
-
-# Example with unified context (agents share message history)
-# parallel_agents:
-#   - name: redteam_agent
-#     unified_context: true  # Share message history with other unified agents
-#   - name: blueteam_agent
-#     unified_context: true  # Share message history with other unified agents
-
-# When 2 or more agents are configured, parallel mode is automatically enabled
-# The agents will be available for selection when you enter a prompt
+    team: Team 1 - Defender vs Adversary
+    prompt: >-
+      Inside defender: inspect container services, collect telemetry, harden SSH.
+    auto_run: true
+    env:
+      CTF_INSIDE: true
+  - name: redteam_agent
+    team: Team 1 - Defender vs Adversary
+    prompt: >-
+      External adversary: enumerate open ports and attempt foothold.
+    env:
+      CTF_INSIDE: false
+  - name: blueteam_agent
+    team: Team 2 - Alternate Matchup
+    auto_run: true
+    env:
+      CTF_INSIDE: true
+  - name: redteam_agent
+    team: Team 2 - Alternate Matchup
+    prompt: >-
+      Standby attacker: wait for defender intel before moving.
+    auto_run: true
+    env:
+      CTF_INSIDE: false

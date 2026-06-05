@@ -1,5 +1,8 @@
 # CAI Terminal User Interface (TUI)
 
+!!! warning "Documentation freshness"
+    This TUI section is **likely out of date**. **Maintained documentation** for commands and behaviour lives under the **[CLI docs](../cai/getting-started/commands.md)** and the rest of the **`docs/cai/`** tree; prefer those sources when something disagrees with this guide.
+
 > **⚠️ DEPRECATED - Superseded by Mobile UI**  
 > The Terminal User Interface (TUI) has been deprecated in favor of the new **[Mobile UI](../mui/mui_index.md)** for CAI-Pro users.  
 > While the TUI remains functional for existing users, all new features and development efforts are focused on the Mobile UI.  
@@ -171,8 +174,8 @@ See the complete [Keyboard Shortcuts Reference](keyboard_shortcuts.md) for all s
 | `/model <name>` | Change model |
 | `/queue` | Show prompt queue |
 | `/cost` | Show costs and tokens |
-| `/save <file>` | Save conversation |
-| `/load <file>` | Load conversation |
+| `/save <file>` | Save as `.jsonl` (for `/load`) or `.md` (report) |
+| `/load <file>` | Load conversation JSONL (not `.md` exports) |
 
 See the complete [Commands Reference](commands_reference.md) for all commands.
 

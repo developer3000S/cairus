@@ -31,25 +31,31 @@ load_dotenv()
 # )
 # set_default_openai_client(external_client)
 
+
 async def main():
     # Apply litellm patch to fix the __annotations__ error
     patch_applied = fix_litellm_transcription_annotations()
     if not patch_applied:
-        print(color("Something went wrong patching LiteLLM fix_litellm_transcription_annotations", color="red"))
-        
+        print(
+            color(
+                "Something went wrong patching LiteLLM fix_litellm_transcription_annotations",
+                color="red",
+            )
+        )
+
     # Force the use of OpenAIChatCompletionsModel instead of OpenAIResponsesModel
     set_use_responses_by_default(False)
-        
+
     # Get the one_tool agent
     agent = get_agent_by_name("one_tool_agent")
 
     print(f"Using model: {os.getenv('CAI_MODEL', 'default')}")
-    
+
     # Stream indicator
     print("\nAgent response (streaming):")
     print("-" * 40)
     print("Agent: ", end="", flush=True)
-    
+
     # Run the agent with a simple test message in streaming mode
     result = Runner.run_streamed(agent, "Hello! Can you list the files in the current directory?")
 
@@ -62,20 +68,20 @@ async def main():
         event_count += 1
         # Add a small delay to allow the streaming panel to update properly
         await asyncio.sleep(0.01)
-        
+
         # # Print a progress indicator
         # if event_count % 10 == 0:
         #     elapsed = time.time() - start_time
         #     sys.stdout.write(f"\rProcessed {event_count} events in {elapsed:.1f} seconds...")
         #     sys.stdout.flush()
-    
+
     # Clear the progress line
     sys.stdout.write("\r" + " " * 60 + "\r")
     sys.stdout.flush()
-    
-    
+
     print("\n" + "-" * 40)
     print("\nTest completed successfully!")
 
+
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

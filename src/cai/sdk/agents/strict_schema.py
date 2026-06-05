@@ -94,7 +94,7 @@ def _ensure_strict_json_schema(
             json_schema.update(
                 _ensure_strict_json_schema(all_of[0], path=(*path, "allOf", "0"), root=root)
             )
-            json_schema.pop("allOf")
+            json_schema.pop("allOf", None)
         else:
             json_schema["allOf"] = [
                 _ensure_strict_json_schema(entry, path=(*path, "allOf", str(i)), root=root)
@@ -124,7 +124,7 @@ def _ensure_strict_json_schema(
 
         # properties from the json schema take priority over the ones on the `$ref`
         json_schema.update({**resolved, **json_schema})
-        json_schema.pop("$ref")
+        json_schema.pop("$ref", None)
         # Since the schema expanded from `$ref` might not have `additionalProperties: false` applied
         # we call `_ensure_strict_json_schema` again to fix the inlined schema and ensure it's valid
         return _ensure_strict_json_schema(json_schema, path=path, root=root)
@@ -139,10 +139,12 @@ def resolve_ref(*, root: dict[str, object], ref: str) -> object:
     path = ref[2:].split("/")
     resolved = root
     for key in path:
+        if not isinstance(resolved, dict) or key not in resolved:
+            raise ValueError(f"Key '{key}' not found while resolving {ref}")
         value = resolved[key]
-        assert is_dict(value), (
-            f"encountered non-dictionary entry while resolving {ref} - {resolved}"
-        )
+        assert is_dict(
+            value
+        ), f"encountered non-dictionary entry while resolving {ref} - {resolved}"
         resolved = value
 
     return resolved

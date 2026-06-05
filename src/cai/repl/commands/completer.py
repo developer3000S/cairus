@@ -5,14 +5,17 @@ command shadowing.
 """
 # Standard library imports
 import datetime
+import os
 import threading
 import time
 from functools import lru_cache
+from html import escape as html_escape
 from typing import (
+    Collection,
+    Dict,
     List,
     Optional,
-    Dict,
-    Any
+    Set,
 )
 
 # Third-party imports
@@ -52,7 +55,7 @@ class FuzzyCommandCompleter(Completer):
     - Autocompletion menu with descriptions
     - Command shadowing (showing hints for previously used commands)
     - Model completion for the /model command
-    - Agent completion for the /agent command
+    - Agent completion for ``/agent select|info`` (third word); second word uses registered subcommands
     """
 
     # Class-level cache for models
@@ -66,6 +69,11 @@ class FuzzyCommandCompleter(Completer):
     _cached_agent_numbers = {}
     _last_agent_fetch = datetime.datetime.now() - datetime.timedelta(minutes=10)
     _agent_fetch_lock = threading.Lock()
+
+    # Class-level cache for ALL agents including patterns (for /parallel add)
+    _cached_all_agents = []
+    _last_all_agent_fetch = datetime.datetime.now() - datetime.timedelta(minutes=10)
+    _all_agent_fetch_lock = threading.Lock()
     
     def __init__(self):
         """Initialize the command completer with cached model and agent information."""
@@ -86,12 +94,18 @@ class FuzzyCommandCompleter(Completer):
 
         # Styling for the completion menu
         self.completion_style = Style.from_dict({
-            'completion-menu': 'bg:#2b2b2b #ffffff',
-            'completion-menu.completion': 'bg:#2b2b2b #ffffff',
-            'completion-menu.completion.current': 'bg:#004b6b #ffffff',
-            'scrollbar.background': 'bg:#2b2b2b',
-            'scrollbar.button': 'bg:#004b6b',
+            'completion-menu': 'bg:#0f1b16 #e8efe9',
+            'completion-menu.completion': 'bg:#0f1b16 #e8efe9',
+            'completion-menu.completion.current': 'bg:#123526 #00ff9d bold',
+            'scrollbar.background': 'bg:#0f1b16',
+            'scrollbar.button': 'bg:#1f5a43',
         })
+
+        # /virtualization set|run argument completion (Docker-backed, short TTL)
+        self._virt_comp_lock = threading.Lock()
+        self._virt_comp_last = 0.0
+        self._virt_comp_containers: List[str] = []
+        self._virt_comp_images: List[str] = []
     
     def _background_fetch_agents(self):
         """Fetch agents in background to avoid blocking the UI."""
@@ -141,6 +155,23 @@ class FuzzyCommandCompleter(Completer):
                 # Silently fail if agent fetching is not available
                 pass
     
+    def fetch_all_agents_with_patterns(self):
+        """Fetch all available agents including patterns (for /parallel add)."""
+        now = datetime.datetime.now()
+
+        with self._all_agent_fetch_lock:
+            if (now - self._last_all_agent_fetch).total_seconds() < 60:
+                return
+
+            self._last_all_agent_fetch = now
+
+            try:
+                from cai.agents import get_available_agents
+
+                self._cached_all_agents = list(get_available_agents().keys())
+            except Exception:  # pylint: disable=broad-except
+                pass
+
     def _background_fetch_models(self):
         """Fetch models in background to avoid blocking the UI."""
         try:
@@ -237,7 +268,6 @@ class FuzzyCommandCompleter(Completer):
             else:
                 self.command_history[main_command] = 1
 
-    @lru_cache(maxsize=1)
     def get_command_descriptions(self):
         """Get descriptions for all commands.
 
@@ -246,10 +276,11 @@ class FuzzyCommandCompleter(Completer):
         """
         global COMMAND_DESCRIPTIONS_CACHE
         if COMMAND_DESCRIPTIONS_CACHE is None:
+            from cai.repl.commands import _ensure_all_commands_loaded
+            _ensure_all_commands_loaded()
             COMMAND_DESCRIPTIONS_CACHE = {cmd.name: cmd.description for cmd in COMMANDS.values()}
         return COMMAND_DESCRIPTIONS_CACHE
 
-    @lru_cache(maxsize=1)
     def get_subcommand_descriptions(self):
         """Get descriptions for all subcommands.
 
@@ -258,6 +289,8 @@ class FuzzyCommandCompleter(Completer):
         """
         global SUBCOMMAND_DESCRIPTIONS_CACHE
         if SUBCOMMAND_DESCRIPTIONS_CACHE is None:
+            from cai.repl.commands import _ensure_all_commands_loaded
+            _ensure_all_commands_loaded()
             descriptions = {}
             for cmd in COMMANDS.values():
                 for subcmd in cmd.get_subcommands():
@@ -266,7 +299,6 @@ class FuzzyCommandCompleter(Completer):
             SUBCOMMAND_DESCRIPTIONS_CACHE = descriptions
         return SUBCOMMAND_DESCRIPTIONS_CACHE
 
-    @lru_cache(maxsize=1)
     def get_all_commands(self):
         """Get all commands and their subcommands.
 
@@ -275,6 +307,8 @@ class FuzzyCommandCompleter(Completer):
         """
         global ALL_COMMANDS_CACHE
         if ALL_COMMANDS_CACHE is None:
+            from cai.repl.commands import _ensure_all_commands_loaded
+            _ensure_all_commands_loaded()
             ALL_COMMANDS_CACHE = {cmd.name: cmd.get_subcommands() for cmd in COMMANDS.values()}
         return ALL_COMMANDS_CACHE
 
@@ -315,6 +349,7 @@ class FuzzyCommandCompleter(Completer):
 
         # Add command completions
         for cmd, description in sorted_commands:
+            safe_desc = html_escape(description)
             # Exact prefix match
             if cmd.startswith(current_word):
                 suggestions.append(Completion(
@@ -322,7 +357,7 @@ class FuzzyCommandCompleter(Completer):
                     start_position=-len(current_word),
                     display=HTML(
                         f"<ansicyan><b>{cmd:<15}</b></ansicyan> "
-                        f"{description}"),
+                        f"{safe_desc}"),
                     style="fg:ansicyan bold"
                 ))
             # Fuzzy match (contains the substring)
@@ -331,13 +366,13 @@ class FuzzyCommandCompleter(Completer):
                     cmd,
                     start_position=-len(current_word),
                     display=HTML(
-                        f"<ansicyan>{cmd:<15}</ansicyan> {description}"),
+                        f"<ansicyan>{cmd:<15}</ansicyan> {safe_desc}"),
                     style="fg:ansicyan"
                 ))
 
         # Add alias completions
         for alias, cmd in sorted(COMMAND_ALIASES.items()):
-            cmd_description = command_descriptions.get(cmd, "")
+            cmd_description = html_escape(command_descriptions.get(cmd, ""))
             if alias.startswith(current_word):
                 suggestions.append(Completion(
                     alias,
@@ -454,8 +489,8 @@ class FuzzyCommandCompleter(Completer):
         if cmd in all_commands:
             for subcmd in sorted(all_commands[cmd]):
                 # Get description for this subcommand if available
-                subcmd_description = subcommand_descriptions.get(
-                    f"{cmd} {subcmd}", "")
+                subcmd_description = html_escape(
+                    subcommand_descriptions.get(f"{cmd} {subcmd}", ""))
 
                 # Exact prefix match
                 if subcmd.startswith(current_word):
@@ -485,6 +520,148 @@ class FuzzyCommandCompleter(Completer):
         
         return suggestions
 
+    def _resume_arg_completions(self, current_word: str):
+        """First argument after ``/resume`` / ``/r`` (subcommand, paths, session id prefixes)."""
+        cw = (current_word or "").lower()
+        pos = -len(current_word or "")
+
+        # Subcommand (same accent family as other /command <subcmd> rows: yellow)
+        if not cw or "last".startswith(cw):
+            yield Completion(
+                "last",
+                start_position=pos,
+                display=HTML(
+                    "<ansiyellow><b>last</b></ansiyellow> "
+                    "<ansiwhite>Newest JSONL with messages under ./logs</ansiwhite> "
+                    "<span style='color:#6b7c74'>(subcommand)</span>"
+                ),
+                style="fg:ansiyellow bold",
+            )
+
+        # Path-like arguments (cyan — distinct from subcommand and id tokens)
+        for label, desc in (
+            ("logs/", "Logs directory"),
+            ("logs/last", "Symlink to last capture"),
+        ):
+            if cw and not label.lower().startswith(cw):
+                continue
+            if not cw or label.lower().startswith(cw):
+                yield Completion(
+                    label,
+                    start_position=pos,
+                    display=HTML(
+                        f"<ansicyan><b>{html_escape(label)}</b></ansicyan> "
+                        f"<ansiwhite>{html_escape(desc)}</ansiwhite> "
+                        "<span style='color:#6b7c74'>(path)</span>"
+                    ),
+                    style="fg:ansicyan bold",
+                )
+
+        try:
+            from cai.repl.session_resume import (
+                DEFAULT_RECENT_SESSION_COUNT,
+                list_recent_sessions,
+            )
+
+            for sess in list_recent_sessions(DEFAULT_RECENT_SESSION_COUNT):
+                sid = (sess.get("session_id") or "")[:8]
+                if not sid:
+                    continue
+                fn = html_escape(str(sess.get("file_name") or ""))
+                if cw and not sid.lower().startswith(cw):
+                    continue
+                yield Completion(
+                    sid,
+                    start_position=pos,
+                    display=HTML(
+                        f"<ansimagenta><b>{html_escape(sid)}</b></ansimagenta> "
+                        f"<ansiwhite>{fn}</ansiwhite> "
+                        "<span style='color:#6b7c74'>(session id)</span>"
+                    ),
+                    style="fg:ansimagenta bold",
+                )
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+    def _resume_dir_token_completions(self, dir_arg: str, current_word: str):
+        """Third token after ``/resume <dir>``: values for ``find_jsonl_by_token_in_dir``."""
+        from pathlib import Path
+
+        if (dir_arg or "").strip().lower() == "last":
+            return
+        pos = -len(current_word or "")
+        cw = (current_word or "").lower()
+        p = Path(dir_arg).expanduser()
+        if not p.is_dir():
+            return
+        try:
+            files = [f for f in p.rglob("*.jsonl") if f.is_file()]
+        except OSError:
+            return
+        if not files:
+            return
+        files.sort(key=lambda fp: fp.stat().st_mtime, reverse=True)
+        seen: Set[str] = set()
+        cap = 80
+        for f in files:
+            name = f.name
+            nl = name.lower()
+            if cw and cw not in nl and not nl.startswith(cw):
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            yield Completion(
+                name,
+                start_position=pos,
+                display=HTML(
+                    f"<ansigreen><b>{html_escape(name)}</b></ansigreen> "
+                    "<ansiwhite>Substring in filename → newest match</ansiwhite> "
+                    "<span style='color:#6b7c74'>(token)</span>"
+                ),
+                style="fg:ansigreen bold",
+            )
+            if len(seen) >= cap:
+                break
+
+    def _sessions_arg_completions(self, current_word: str):
+        """First argument after ``/sessions`` / ``/sess`` (count or id prefix)."""
+        cw = (current_word or "").lower()
+        for label, desc in (
+            ("10", "Show last 10 sessions"),
+            ("20", "Show last 20 sessions"),
+            ("50", "Show last 50 sessions"),
+        ):
+            if cw and not label.startswith(cw):
+                continue
+            if not cw or label.startswith(cw):
+                yield Completion(
+                    label,
+                    start_position=-len(current_word or ""),
+                    display=HTML(
+                        f"<span style='color:#00ff9d'><b>{html_escape(label)}</b></span> "
+                        f"<span style='color:#9aa0a6'>{html_escape(desc)}</span>"
+                    ),
+                )
+
+    def _model_show_filter_completions(self, current_word: str) -> List[Completion]:
+        """Suggest ``supported`` as the next token after ``/model show``."""
+        cw = (current_word or "").lower()
+        out: List[Completion] = []
+        if not cw or "supported".startswith(cw):
+            out.append(
+                Completion(
+                    "supported",
+                    start_position=-len(current_word),
+                    display=HTML(
+                        "<ansiyellow><b>supported</b></ansiyellow> "
+                        "function-calling models only"
+                    ),
+                    style="fg:ansiyellow bold",
+                )
+            )
+        return out
+
     def get_model_suggestions(self, current_word: str) -> List[Completion]:
         """Get model suggestions for the /model command.
 
@@ -495,6 +672,16 @@ class FuzzyCommandCompleter(Completer):
             A list of completions for models
         """
         suggestions = []
+        cw = (current_word or "").lower()
+        if not cw or "show".startswith(cw):
+            suggestions.append(
+                Completion(
+                    "show",
+                    start_position=-len(current_word),
+                    display=HTML("<ansiyellow><b>show</b></ansiyellow> full catalog"),
+                    style="fg:ansiyellow bold",
+                )
+            )
 
         # First try to complete model numbers
         for num, model_name in self._cached_model_numbers.items():
@@ -549,23 +736,25 @@ class FuzzyCommandCompleter(Completer):
                 except (ImportError, AttributeError, KeyError):  # pylint: disable=broad-except
                     display_name = agent_name
                     
+                safe_display = html_escape(str(display_name))
                 suggestions.append(Completion(
                     num,
                     start_position=-len(current_word),
                     display=HTML(
                         f"<ansiwhite><b>{num:<3}</b></ansiwhite> "
-                        f"{display_name}"),
+                        f"{safe_display}"),
                     style="fg:ansiwhite bold"
                 ))
 
         # Then try to complete agent names
         for agent_key in self._cached_agents:
+            safe_key = html_escape(str(agent_key))
             if agent_key.startswith(current_word):
                 suggestions.append(Completion(
                     agent_key,
                     start_position=-len(current_word),
                     display=HTML(
-                        f"<ansimagenta><b>{agent_key}</b></ansimagenta>"),
+                        f"<ansimagenta><b>{safe_key}</b></ansimagenta>"),
                     style="fg:ansimagenta bold"
                 ))
             elif (current_word.lower() in agent_key.lower() and
@@ -573,9 +762,386 @@ class FuzzyCommandCompleter(Completer):
                 suggestions.append(Completion(
                     agent_key,
                     start_position=-len(current_word),
-                    display=HTML(f"<ansimagenta>{agent_key}</ansimagenta>"),
+                    display=HTML(f"<ansimagenta>{safe_key}</ansimagenta>"),
                     style="fg:ansimagenta"
                 ))
+
+        return suggestions
+
+    def get_flush_agent_nonempty_suggestions(
+        self,
+        current_word: str,
+        *,
+        exclude_labels: Optional[Collection[str]] = None,
+    ) -> List[Completion]:
+        """``/flush agent`` / ``/clear agent``: session agents with non-empty history (REPL).
+
+        One suggestion per target: ``DisplayName [Pn]`` only (no bare ``Pn`` duplicates).
+
+        ``exclude_labels``: full labels to omit (e.g. agents already picked for ``/merge``).
+        """
+        if os.getenv("CAI_TUI_MODE") == "true":
+            return []
+
+        suggestions: List[Completion] = []
+        try:
+            from cai.repl.commands.flush import ordered_nonempty_flush_agent_labels_repl
+
+            labels = list(ordered_nonempty_flush_agent_labels_repl())
+        except (ImportError, AttributeError):
+            return suggestions
+
+        if exclude_labels:
+            banned = frozenset(exclude_labels)
+            labels = [lb for lb in labels if lb not in banned]
+
+        cw = current_word
+        for label in labels:
+            if label.startswith(cw):
+                suggestions.append(
+                    Completion(
+                        label,
+                        start_position=-len(cw),
+                        display=HTML(f"<ansimagenta><b>{html_escape(label)}</b></ansimagenta>"),
+                        style="fg:ansimagenta bold",
+                    )
+                )
+            elif cw.lower() in label.lower() and not label.startswith(cw):
+                suggestions.append(
+                    Completion(
+                        label,
+                        start_position=-len(cw),
+                        display=HTML(f"<ansimagenta>{html_escape(label)}</ansimagenta>"),
+                        style="fg:ansimagenta",
+                    )
+                )
+
+        return suggestions
+
+    _MERGE_STRATEGY_VALUES = frozenset({"chronological", "by-agent", "interleaved"})
+
+    @staticmethod
+    def _merge_flag_split(tokens: List[str]) -> List[str]:
+        pos: List[str] = []
+        for t in tokens:
+            if t.startswith("--"):
+                break
+            pos.append(t)
+        return pos
+
+    @staticmethod
+    def _merge_label_slot_id(label: str) -> Optional[str]:
+        if "[" not in label or not label.endswith("]"):
+            return None
+        return label.rsplit("[", 1)[-1].rstrip("]")
+
+    def _merge_committed_positionals(
+        self, words: List[str], merge_start: int, has_trailing_space: bool
+    ) -> List[str]:
+        """Tokens already chosen for merge slots (excludes the word being typed)."""
+        raw = self._merge_flag_split(words[merge_start:])
+        if not raw:
+            return []
+        if has_trailing_space:
+            return raw
+        if len(raw) == 1:
+            return []
+        return raw[:-1]
+
+    def _merge_excluded_labels_from_committed(
+        self, committed: List[str], labels: List[str]
+    ) -> Set[str]:
+        """Labels to hide: already selected by slot id (P1), full label, or multi-word slice."""
+        excluded: Set[str] = set()
+        if not committed:
+            return excluded
+        n = len(committed)
+        for lbl in labels:
+            for i in range(n):
+                for j in range(i + 1, n + 1):
+                    if " ".join(committed[i:j]) == lbl:
+                        excluded.add(lbl)
+                        break
+                else:
+                    continue
+                break
+            if lbl in excluded:
+                continue
+            slot = self._merge_label_slot_id(lbl)
+            if not slot:
+                continue
+            for tok in committed:
+                if tok.strip().upper() == slot.upper():
+                    excluded.add(lbl)
+                    break
+        return excluded
+
+    def _merge_strategy_blocks_flush_agent_suggestions(self, words: List[str]) -> bool:
+        if "--strategy" not in words:
+            return False
+        i = words.index("--strategy")
+        if i + 1 >= len(words):
+            return True
+        return words[i + 1] not in self._MERGE_STRATEGY_VALUES
+
+    def _yield_merge_agent_arg_completions(
+        self,
+        words: List[str],
+        current_word: str,
+        *,
+        parallel_merge: bool,
+        has_trailing_space: bool,
+    ):
+        """Merge / parallel merge agent args: same pool as flush, minus already-picked agents."""
+        if current_word.startswith("--"):
+            return
+        if parallel_merge:
+            if len(words) < 2 or words[1] != "merge":
+                return
+            merge_start = 2
+        else:
+            merge_start = 1
+        if self._merge_strategy_blocks_flush_agent_suggestions(words):
+            return
+        try:
+            from cai.repl.commands.flush import ordered_nonempty_flush_agent_labels_repl
+
+            all_labels = list(ordered_nonempty_flush_agent_labels_repl())
+        except (ImportError, AttributeError):
+            all_labels = []
+        committed = self._merge_committed_positionals(
+            words, merge_start, has_trailing_space
+        )
+        excluded = self._merge_excluded_labels_from_committed(committed, all_labels)
+        yield from self.get_flush_agent_nonempty_suggestions(
+            current_word, exclude_labels=excluded
+        )
+
+    def get_env_catalog_target_suggestions(self, current_word: str) -> List[Completion]:
+        """Complete catalog # or variable name for ``/env get`` / ``/env set`` / ``/help var``."""
+        suggestions: List[Completion] = []
+        try:
+            from cai.repl.commands.env_catalog import ENV_VARS
+        except (ImportError, AttributeError):
+            return suggestions
+
+        cw = (current_word or "").strip()
+        cw_lower = cw.lower()
+
+        for num, var_info in ENV_VARS.items():
+            num_s = str(num)
+            var_name = str(var_info.get("name", ""))
+            safe_name = html_escape(var_name)
+
+            if not cw:
+                suggestions.append(
+                    Completion(
+                        var_name,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f"<ansigreen><b>{safe_name}</b></ansigreen> "
+                            f"<ansiwhite>({num_s})</ansiwhite>"
+                        ),
+                        style="fg:ansigreen bold",
+                    )
+                )
+                continue
+
+            if cw.isdigit():
+                if num_s.startswith(cw):
+                    suggestions.append(
+                        Completion(
+                            num_s,
+                            start_position=-len(current_word),
+                            display=HTML(
+                                f"<ansiwhite><b>{num_s:<4}</b></ansiwhite> {safe_name}"
+                            ),
+                            style="fg:ansiwhite bold",
+                        )
+                    )
+                continue
+
+            if cw_lower in var_name.lower() or var_name.upper().startswith(cw.upper()):
+                suggestions.append(
+                    Completion(
+                        var_name,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f"<ansigreen><b>{safe_name}</b></ansigreen> "
+                            f"<ansiwhite>({num_s})</ansiwhite>"
+                        ),
+                        style="fg:ansigreen bold",
+                    )
+                )
+
+        return suggestions
+
+    @staticmethod
+    def _resolved_env_set_target_is_model(words: List[str]) -> bool:
+        """True if ``/env set <spec>`` resolves to a model-type catalog variable."""
+        if len(words) < 3:
+            return False
+        try:
+            from cai.repl.commands.env_catalog import ENV_VARS
+            from cai.repl.commands.env_catalog_validate import (
+                is_model_catalog_var,
+                resolve_catalog_spec,
+            )
+        except (ImportError, AttributeError):
+            return False
+        spec = words[2].strip()
+        if not spec:
+            return False
+        r = resolve_catalog_spec(spec, ENV_VARS)
+        if not r:
+            return False
+        _n, _info, var_name = r
+        return is_model_catalog_var(var_name)
+
+    @staticmethod
+    def _resolved_env_set_target_is_ctf_name(words: List[str]) -> bool:
+        """True if ``/env set <spec>`` resolves to ``CTF_NAME``."""
+        if len(words) < 3:
+            return False
+        try:
+            from cai.repl.commands.env_catalog import ENV_VARS
+            from cai.repl.commands.env_catalog_validate import resolve_catalog_spec
+        except (ImportError, AttributeError):
+            return False
+        spec = words[2].strip()
+        if not spec:
+            return False
+        r = resolve_catalog_spec(spec, ENV_VARS)
+        if not r:
+            return False
+        _n, _info, var_name = r
+        return var_name == "CTF_NAME"
+
+    def get_ctf_name_suggestions(self, current_word: str) -> List[Completion]:
+        """Suggest CAIBench CTF ids for ``/env set CTF_NAME …`` (same pool as validation)."""
+        from cai.repl.commands.env_catalog_validate import get_caibench_ctf_names_for_completion_cached
+
+        suggestions: List[Completion] = []
+        names = list(get_caibench_ctf_names_for_completion_cached())
+        if not names:
+            return suggestions
+
+        cw = current_word or ""
+        cw_stripped = cw.strip()
+        cw_lower = cw_stripped.lower()
+        # Thousands of CTFs: cap when the user has not typed a filter yet.
+        max_blank = 400
+
+        shown = 0
+        for n in names:
+            safe = html_escape(n)
+            if not cw_lower:
+                if shown >= max_blank:
+                    break
+                suggestions.append(
+                    Completion(
+                        n,
+                        start_position=-len(current_word),
+                        display=HTML(f"<ansicyan><b>{safe}</b></ansicyan>"),
+                        style="fg:ansicyan bold",
+                    )
+                )
+                shown += 1
+                continue
+            if n.startswith(cw_stripped):
+                suggestions.append(
+                    Completion(
+                        n,
+                        start_position=-len(current_word),
+                        display=HTML(f"<ansicyan><b>{safe}</b></ansicyan>"),
+                        style="fg:ansicyan bold",
+                    )
+                )
+            elif cw_lower in n.lower():
+                suggestions.append(
+                    Completion(
+                        n,
+                        start_position=-len(current_word),
+                        display=HTML(f"<ansicyan>{safe}</ansicyan>"),
+                        style="fg:ansicyan",
+                    )
+                )
+        return suggestions
+
+    def get_all_agent_suggestions(self, current_word: str) -> list[Completion]:
+        """Get all agent suggestions including patterns (for /parallel add).
+
+        Unlike get_agent_suggestions(), this does NOT filter out parallel
+        patterns and does NOT offer numeric shortcuts, since /parallel add
+        expects a plain agent key name.
+        """
+        suggestions: list[Completion] = []
+
+        self.fetch_all_agents_with_patterns()
+
+        for agent_key in self._cached_all_agents:
+            if agent_key.startswith(current_word):
+                suggestions.append(Completion(
+                    agent_key,
+                    start_position=-len(current_word),
+                    display=HTML(
+                        f"<ansimagenta><b>{agent_key}</b></ansimagenta>"),
+                    style="fg:ansimagenta bold",
+                ))
+            elif (current_word.lower() in agent_key.lower()
+                  and not agent_key.startswith(current_word)):
+                suggestions.append(Completion(
+                    agent_key,
+                    start_position=-len(current_word),
+                    display=HTML(
+                        f"<ansimagenta>{agent_key}</ansimagenta>"),
+                    style="fg:ansimagenta",
+                ))
+
+        return suggestions
+
+    def get_parallel_config_suggestions(self, current_word: str) -> list[Completion]:
+        """Get suggestions for /parallel remove from currently configured agents.
+
+        Shows each configured agent with its ID (P1, P2...) and numeric index
+        so that duplicate agent names are distinguishable.
+        """
+        suggestions: list[Completion] = []
+
+        try:
+            from cai.repl.commands._parallel_monolith import PARALLEL_CONFIGS
+
+            for idx, config in enumerate(PARALLEL_CONFIGS, 1):
+                pid = config.id or f"P{idx}"
+                model_label = config.model or "default"
+                display_text = f"{config.agent_name} ({model_label})"
+
+                # Offer the ID (e.g. "P1") as a completion
+                if pid.lower().startswith(current_word.lower()):
+                    suggestions.append(Completion(
+                        pid,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f"<ansiwhite><b>{pid:<4}</b></ansiwhite> "
+                            f"<ansimagenta>{html_escape(display_text)}"
+                            f"</ansimagenta>"),
+                        style="fg:ansiwhite bold",
+                    ))
+
+                # Also offer the numeric index (e.g. "1")
+                idx_str = str(idx)
+                if idx_str.startswith(current_word):
+                    suggestions.append(Completion(
+                        idx_str,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f"<ansiwhite><b>{idx_str:<4}</b></ansiwhite> "
+                            f"<ansimagenta>{html_escape(display_text)}"
+                            f"</ansimagenta>"),
+                        style="fg:ansiwhite bold",
+                    ))
+        except (ImportError, AttributeError):
+            pass
 
         return suggestions
 
@@ -626,6 +1192,90 @@ class FuzzyCommandCompleter(Completer):
             
         return suggestions
 
+    def _refresh_virtualization_completion_cache(self) -> None:
+        """Populate container IDs and image names for /virtualization completions."""
+        from cai.repl.commands._virtualization_monolith import DEFAULT_IMAGES, DockerManager
+
+        def _default_image_suggestions() -> List[str]:
+            names = set(DEFAULT_IMAGES.keys())
+            for meta in DEFAULT_IMAGES.values():
+                sid = meta.get("id")
+                if isinstance(sid, str) and sid:
+                    names.add(sid)
+            return sorted(names)
+
+        now = time.monotonic()
+        with self._virt_comp_lock:
+            if now - self._virt_comp_last < 20.0 and (self._virt_comp_containers or self._virt_comp_images):
+                return
+            self._virt_comp_last = now
+            self._virt_comp_containers = []
+            self._virt_comp_images = []
+            try:
+                self._virt_comp_images = _default_image_suggestions()
+                dm = DockerManager()
+                if not dm.is_docker_installed() or not dm.is_docker_running():
+                    return
+                seen_c: Set[str] = set()
+                for c in dm.get_container_list():
+                    cid = (c.get("ID") or "").strip()
+                    if not cid:
+                        continue
+                    short = cid[:12]
+                    for token in (short, cid):
+                        if token not in seen_c:
+                            seen_c.add(token)
+                            self._virt_comp_containers.append(token)
+                self._virt_comp_containers.sort()
+                seen_i: Set[str] = set(self._virt_comp_images)
+                for img in dm.get_images_list():
+                    repo = (img.get("Repository") or "").strip()
+                    if not repo or repo == "<none>":
+                        continue
+                    tag = (img.get("Tag") or "").strip()
+                    if tag and tag != "<none>" and tag != "latest":
+                        label = f"{repo}:{tag}"
+                    else:
+                        label = repo
+                    if label not in seen_i:
+                        seen_i.add(label)
+                        self._virt_comp_images.append(label)
+                self._virt_comp_images.sort()
+            except Exception:  # pylint: disable=broad-except
+                self._virt_comp_containers = []
+                self._virt_comp_images = _default_image_suggestions()
+
+    def get_virtualization_arg_completions(self, subcommand: str, current_word: str):
+        """Complete container IDs after `set`, image names after `run`."""
+        if subcommand not in ("set", "run"):
+            return
+        self._refresh_virtualization_completion_cache()
+        cw = (current_word or "").lower()
+        if subcommand == "set":
+            for cid in self._virt_comp_containers:
+                if cid.lower().startswith(cw):
+                    yield Completion(
+                        cid,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f'<span style="color:#00ff9d"><b>{html_escape(cid)}</b></span> '
+                            "<span style='color:#b8d4c9'>container</span>"
+                        ),
+                        style="fg:#00ff9d bold",
+                    )
+        elif subcommand == "run":
+            for name in self._virt_comp_images:
+                if name.lower().startswith(cw):
+                    yield Completion(
+                        name,
+                        start_position=-len(current_word),
+                        display=HTML(
+                            f'<span style="color:#00ff9d"><b>{html_escape(name)}</b></span> '
+                            "<span style='color:#b8d4c9'>image</span>"
+                        ),
+                        style="fg:#00ff9d bold",
+                    )
+
     def get_mcp_suggestions(self, words: List[str], current_word: str) -> List[Completion]:
         """Get context-aware MCP command completions.
         
@@ -668,7 +1318,7 @@ class FuzzyCommandCompleter(Completer):
                                 style="fg:ansiyellow bold"
                             ))
                             
-            elif subcommand in ["add", "remove", "tools"]:
+            elif subcommand in ["add", "remove", "tools", "test"]:
                 # These commands need an MCP server name
                 suggestions.extend(self.get_mcp_server_suggestions(current_word))
         
@@ -723,7 +1373,7 @@ class FuzzyCommandCompleter(Completer):
                     start_position=0,
                     display=HTML(
                         f"<ansicyan><b>{cmd:<15}</b></ansicyan> "
-                        f"{description}"),
+                        f"{html_escape(description)}"),
                     style="fg:ansicyan bold"
                 )
             return
@@ -747,16 +1397,25 @@ class FuzzyCommandCompleter(Completer):
             # Subcommand completion (second word)
             elif len(effective_words) == 2:
                 cmd = words[0]
+                resolved_cmd = COMMAND_ALIASES.get(cmd, cmd)
 
                 # Special handling for model command
                 if cmd in ["/model", "/mod"]:
                     yield from self.get_model_suggestions(current_word)
-                # Add special handling for agent command
-                elif cmd in ["/agent", "/a"]:
-                    yield from self.get_agent_suggestions(current_word)
+                elif resolved_cmd == "/resume":
+                    yield from self._resume_arg_completions(current_word)
+                elif resolved_cmd == "/sessions":
+                    yield from self._sessions_arg_completions(current_word)
                 # Add special handling for MCP command
                 elif cmd in ["/mcp", "/m"]:
                     yield from self.get_mcp_suggestions(effective_words, current_word)
+                elif COMMAND_ALIASES.get(cmd, cmd) == "/merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=False,
+                        has_trailing_space=has_trailing_space,
+                    )
                 else:
                     # Get subcommand suggestions
                     yield from self.get_subcommand_suggestions(cmd, current_word)
@@ -765,18 +1424,119 @@ class FuzzyCommandCompleter(Completer):
             elif len(effective_words) == 3:
                 cmd = words[0]
                 subcommand = words[1] if len(words) > 1 else ""
-                
+                resolved_cmd = COMMAND_ALIASES.get(cmd, cmd)
+
+                if resolved_cmd == "/merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=False,
+                        has_trailing_space=has_trailing_space,
+                    )
+                elif cmd in ["/parallel", "/par", "/p"] and len(words) >= 2 and words[1] == "merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=True,
+                        has_trailing_space=has_trailing_space,
+                    )
+                elif cmd in ["/model", "/mod"] and subcommand == "show":
+                    yield from self._model_show_filter_completions(current_word)
+                # Compact model / --model: reuse model suggestions
+                elif cmd in ["/compact", "/cmp"] and subcommand in ["model", "--model"]:
+                    yield from self.get_model_suggestions(current_word)
                 # Agent select completion
-                if cmd in ["/agent", "/a"] and subcommand in ["select", "info"]:
+                elif cmd in ["/agent", "/a"] and subcommand in ["select", "info"]:
                     yield from self.get_agent_suggestions(current_word)
+                elif resolved_cmd == "/flush" and subcommand.lower() == "agent":
+                    yield from self.get_flush_agent_nonempty_suggestions(current_word)
+                elif resolved_cmd == "/env" and subcommand == "default":
+                    return
+                elif (resolved_cmd == "/help" and subcommand == "var") or (
+                    resolved_cmd == "/env" and subcommand in ("get", "set")
+                ):
+                    yield from self.get_env_catalog_target_suggestions(current_word)
+                elif resolved_cmd == "/virtualization" and subcommand in ("set", "run"):
+                    yield from self.get_virtualization_arg_completions(subcommand, current_word)
+                # Parallel add: all agents including patterns
+                elif cmd in ["/parallel", "/par", "/p"] and subcommand == "add":
+                    yield from self.get_all_agent_suggestions(current_word)
+                # Parallel remove: only currently configured agents
+                elif cmd in ["/parallel", "/par", "/p"] and subcommand == "remove":
+                    yield from self.get_parallel_config_suggestions(current_word)
+                # Queue add: suggest --agent flag
+                elif cmd in ["/queue", "/que"] and subcommand == "add":
+                    flag = "--agent"
+                    if flag.startswith(current_word):
+                        yield Completion(
+                            flag,
+                            start_position=-len(current_word),
+                            display=HTML(
+                                f"<ansiyellow><b>{flag}</b></ansiyellow> "
+                                "Specify agent for this prompt"),
+                            style="fg:ansiyellow bold",
+                        )
                 # MCP command completion for third word
                 elif cmd in ["/mcp", "/m"]:
                     yield from self.get_mcp_suggestions(effective_words, current_word)
-            
-            # Fourth word completion (for MCP add command)
+                elif resolved_cmd == "/resume" and len(words) >= 2:
+                    yield from self._resume_dir_token_completions(words[1], current_word)
+
+            # Fourth word completion
             elif len(effective_words) == 4:
                 cmd = words[0]
-                
+                subcommand = words[1] if len(words) > 1 else ""
+                third_word = words[2] if len(words) > 2 else ""
+                resolved_cmd = COMMAND_ALIASES.get(cmd, cmd)
+
+                if resolved_cmd == "/merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=False,
+                        has_trailing_space=has_trailing_space,
+                    )
+                elif cmd in ["/parallel", "/par", "/p"] and len(words) >= 2 and words[1] == "merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=True,
+                        has_trailing_space=has_trailing_space,
+                    )
+                # Queue add --agent: suggest agent names
+                elif (cmd in ["/queue", "/que"]
+                        and subcommand == "add"
+                        and third_word == "--agent"):
+                    yield from self.get_all_agent_suggestions(current_word)
                 # MCP add command needs agent name as fourth word
-                if cmd in ["/mcp", "/m"]:
+                elif cmd in ["/mcp", "/m"]:
                     yield from self.get_mcp_suggestions(effective_words, current_word)
+                elif resolved_cmd == "/env" and subcommand == "set":
+                    if self._resolved_env_set_target_is_ctf_name(words):
+                        yield from self.get_ctf_name_suggestions(current_word)
+                    elif self._resolved_env_set_target_is_model(words):
+                        yield from self.get_model_suggestions(current_word)
+
+            # Fifth+ word: /merge and /parallel merge agent arguments
+            elif len(effective_words) >= 5:
+                cmd = words[0]
+                resolved_cmd = COMMAND_ALIASES.get(cmd, cmd)
+                if resolved_cmd == "/merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=False,
+                        has_trailing_space=has_trailing_space,
+                    )
+                elif cmd in ["/parallel", "/par", "/p"] and len(words) >= 2 and words[1] == "merge":
+                    yield from self._yield_merge_agent_arg_completions(
+                        words,
+                        current_word,
+                        parallel_merge=True,
+                        has_trailing_space=has_trailing_space,
+                    )
+                elif resolved_cmd == "/env" and len(words) >= 2 and words[1] == "set":
+                    if self._resolved_env_set_target_is_ctf_name(words):
+                        yield from self.get_ctf_name_suggestions(current_word)
+                    elif self._resolved_env_set_target_is_model(words):
+                        yield from self.get_model_suggestions(current_word)

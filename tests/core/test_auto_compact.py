@@ -1,9 +1,22 @@
 """Test automatic context compaction when limit is reached."""
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from cai.sdk.agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+
+# Common patch target prefix for the extracted auto_compactor module
+_AC = "cai.sdk.agents.models.chatcompletions.auto_compactor"
+
+
+def _make_cfg(auto_compact=True, threshold=0.8, debug=False):
+    """Create a mock CAIConfig for auto-compaction tests."""
+    cfg = MagicMock()
+    cfg.auto_compact = auto_compact
+    cfg.auto_compact_threshold = threshold
+    cfg.debug = debug
+    return cfg
 
 
 class TestAutoCompact:
@@ -12,75 +25,78 @@ class TestAutoCompact:
     @pytest.mark.asyncio
     async def test_auto_compact_triggers_at_threshold(self):
         """Test that auto-compact triggers when context exceeds threshold."""
-        # Set up environment
-        os.environ['CAI_AUTO_COMPACT'] = 'true'
-        os.environ['CAI_AUTO_COMPACT_THRESHOLD'] = '0.8'  # 80% threshold
-        os.environ['CAI_CONTEXT_USAGE'] = '0.0'
-        
-        # Mock the internal auto_compact method directly
-        model = MagicMock(spec=OpenAIChatCompletionsModel)
-        model._get_model_max_tokens = MagicMock(return_value=1000)
-        
-        # Test the _auto_compact_if_needed method
-        with patch('cai.sdk.agents.models.openai_chatcompletions.count_tokens_with_tiktoken') as mock_count:
-            mock_count.return_value = (850, 0)  # 85% of max
-            
-            with patch('cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE') as mock_memory:
-                mock_memory._ai_summarize_history = AsyncMock(return_value="Summary")
-                
-                with patch('cai.repl.commands.memory.COMPACTED_SUMMARIES', {}):
-                    with patch('rich.console.Console'):
-                        # Create actual model instance
-                        from openai import AsyncOpenAI
-                        client = AsyncMock(spec=AsyncOpenAI)
-                        
-                        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
-                            model = OpenAIChatCompletionsModel(
-                                model="gpt-4",
-                                openai_client=client,
-                                agent_name="Test Agent",
-                                agent_id="TEST123"
-                            )
-                            
-                            # Mock the model's max tokens method
-                            with patch.object(model, '_get_model_max_tokens', return_value=1000):
-                                # Call the auto-compact method directly
-                                input_text = "Test message"
-                                new_input, new_instructions, compacted = await model._auto_compact_if_needed(
-                                    estimated_tokens=850,
-                                    input=input_text,
-                                    system_instructions=None
-                                )
-                            
-                                # Verify compaction occurred
-                                assert compacted is True
-                                assert "Previous conversation summary" in new_instructions
-                                mock_memory._ai_summarize_history.assert_called_once_with("Test Agent")
-
-    @pytest.mark.asyncio
-    async def test_auto_compact_disabled(self):
-        """Test that auto-compact doesn't trigger when disabled."""
-        os.environ['CAI_AUTO_COMPACT'] = 'false'
-        
         from openai import AsyncOpenAI
+
         client = AsyncMock(spec=AsyncOpenAI)
-        
-        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
             model = OpenAIChatCompletionsModel(
                 model="gpt-4",
                 openai_client=client,
                 agent_name="Test Agent",
-                agent_id="TEST123"
+                agent_id="TEST123",
             )
-            
-            # Call the auto-compact method directly
+
+        # Patch auto_compactor internals
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.8)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+            patch("cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE") as mock_memory,
+            patch("cai.repl.commands.memory.COMPACTED_SUMMARIES", {}),
+            patch("rich.console.Console"),
+        ):
+            mock_memory._ai_summarize_history = AsyncMock(return_value="Summary")
+
+            # Call the auto-compact method directly — 850 > 1000*0.8 = 800
             new_input, new_instructions, compacted = await model._auto_compact_if_needed(
-                estimated_tokens=900,  # High token count
-                input="Test",
-                system_instructions=None
+                estimated_tokens=850, input="Test message", system_instructions=None
             )
-            
-            # Verify no compaction occurred
+
+            assert compacted is True
+            mock_memory._ai_summarize_history.assert_called_once_with("Test Agent")
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_auto_compact_skips_internal_summary_agent_only(self):
+        """Internal Phase-2 agent must not auto-compact; name is exact 'Summary Agent'."""
+        from openai import AsyncOpenAI
+
+        client = AsyncMock(spec=AsyncOpenAI)
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
+            model = OpenAIChatCompletionsModel(
+                model="gpt-4",
+                openai_client=client,
+                agent_name="Summary Agent",
+                agent_id="SUM",
+            )
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.8)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+        ):
+            _, _, compacted = await model._auto_compact_if_needed(
+                estimated_tokens=850,
+                input="Test",
+                system_instructions=None,
+            )
+        assert compacted is False
+
+    @pytest.mark.asyncio
+    async def test_auto_compact_disabled(self):
+        """Test that auto-compact doesn't trigger when disabled."""
+        from openai import AsyncOpenAI
+
+        client = AsyncMock(spec=AsyncOpenAI)
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
+            model = OpenAIChatCompletionsModel(
+                model="gpt-4", openai_client=client, agent_name="Test Agent", agent_id="TEST123"
+            )
+
+        with patch(f"{_AC}.get_config", return_value=_make_cfg(False)):
+            new_input, new_instructions, compacted = await model._auto_compact_if_needed(
+                estimated_tokens=900, input="Test", system_instructions=None
+            )
+
             assert compacted is False
             assert new_input == "Test"
             assert new_instructions is None
@@ -88,185 +104,167 @@ class TestAutoCompact:
     @pytest.mark.asyncio
     async def test_auto_compact_below_threshold(self):
         """Test that auto-compact doesn't trigger below threshold."""
-        os.environ['CAI_AUTO_COMPACT'] = 'true'
-        os.environ['CAI_AUTO_COMPACT_THRESHOLD'] = '0.8'
-        
         from openai import AsyncOpenAI
+
         client = AsyncMock(spec=AsyncOpenAI)
-        
-        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
             model = OpenAIChatCompletionsModel(
-                model="gpt-4",
-                openai_client=client,
-                agent_name="Test Agent",
-                agent_id="TEST123"
+                model="gpt-4", openai_client=client, agent_name="Test Agent", agent_id="TEST123"
             )
-            
-            with patch.object(model, '_get_model_max_tokens', return_value=1000):
-                # Call the auto-compact method directly
-                new_input, new_instructions, compacted = await model._auto_compact_if_needed(
-                    estimated_tokens=700,  # 70% - below threshold
-                    input="Test",
-                    system_instructions=None
-                )
-                
-                # Verify no compaction occurred
-                assert compacted is False
+
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.8)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+        ):
+            new_input, new_instructions, compacted = await model._auto_compact_if_needed(
+                estimated_tokens=700, input="Test", system_instructions=None  # 70% < 80%
+            )
+
+            assert compacted is False
 
     @pytest.mark.asyncio
     async def test_auto_compact_with_custom_threshold(self):
         """Test auto-compact with custom threshold value."""
-        os.environ['CAI_AUTO_COMPACT'] = 'true'
-        os.environ['CAI_AUTO_COMPACT_THRESHOLD'] = '0.5'  # 50% threshold
-        
         from openai import AsyncOpenAI
+
         client = AsyncMock(spec=AsyncOpenAI)
-        
-        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
             model = OpenAIChatCompletionsModel(
-                model="gpt-4",
-                openai_client=client,
-                agent_name="Test Agent",
-                agent_id="TEST123"
+                model="gpt-4", openai_client=client, agent_name="Test Agent", agent_id="TEST123"
             )
-            
-            with patch.object(model, '_get_model_max_tokens', return_value=1000):
-                with patch('cai.sdk.agents.models.openai_chatcompletions.count_tokens_with_tiktoken') as mock_count:
-                    mock_count.return_value = (600, 0)  # 60% - exceeds 50% threshold
-                    
-                    with patch('cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE') as mock_memory:
-                        mock_memory._ai_summarize_history = AsyncMock(return_value="Summary")
-                        
-                        with patch('cai.repl.commands.memory.COMPACTED_SUMMARIES', {}):
-                            with patch('rich.console.Console'):
-                                # Call the auto-compact method
-                                new_input, new_instructions, compacted = await model._auto_compact_if_needed(
-                                    estimated_tokens=600,
-                                    input="Test",
-                                    system_instructions=None
-                                )
-                                
-                                # Verify compaction occurred at 60% with 50% threshold
-                                assert compacted is True
-                                mock_memory._ai_summarize_history.assert_called_once()
+
+        # 50% threshold — 600 > 1000*0.5 = 500 → should compact
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.5)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+            patch("cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE") as mock_memory,
+            patch("cai.repl.commands.memory.COMPACTED_SUMMARIES", {}),
+            patch("rich.console.Console"),
+        ):
+            mock_memory._ai_summarize_history = AsyncMock(return_value="Summary")
+
+            new_input, new_instructions, compacted = await model._auto_compact_if_needed(
+                estimated_tokens=600, input="Test", system_instructions=None
+            )
+
+            assert compacted is True
+            mock_memory._ai_summarize_history.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_auto_compact_error_handling(self):
         """Test that errors during auto-compact are handled gracefully."""
-        os.environ['CAI_AUTO_COMPACT'] = 'true'
-        os.environ['CAI_AUTO_COMPACT_THRESHOLD'] = '0.8'
-        
         from openai import AsyncOpenAI
+
         client = AsyncMock(spec=AsyncOpenAI)
-        
-        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
             model = OpenAIChatCompletionsModel(
-                model="gpt-4", 
-                openai_client=client,
-                agent_name="Test Agent",
-                agent_id="TEST123"
+                model="gpt-4", openai_client=client, agent_name="Test Agent", agent_id="TEST123"
             )
-            
-            with patch.object(model, '_get_model_max_tokens', return_value=1000):
-                with patch('cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE') as mock_memory:
-                    # Make the summarization fail
-                    mock_memory._ai_summarize_history = AsyncMock(side_effect=Exception("Failed"))
-                    
-                    with patch('rich.console.Console'):
-                        # Call the auto-compact method
-                        new_input, new_instructions, compacted = await model._auto_compact_if_needed(
-                            estimated_tokens=850,
-                            input="Test",
-                            system_instructions=None
-                        )
-                        
-                        # Should return without compaction on error
-                        assert compacted is False
-                        assert new_input == "Test"
-                        assert new_instructions is None
+
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.8)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+            patch("cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE") as mock_memory,
+            patch("rich.console.Console"),
+        ):
+            mock_memory._ai_summarize_history = AsyncMock(side_effect=Exception("Failed"))
+
+            new_input, new_instructions, compacted = await model._auto_compact_if_needed(
+                estimated_tokens=850, input="Test", system_instructions=None
+            )
+
+            assert compacted is False
+            assert new_input == "Test"
+            assert new_instructions is None
 
     @pytest.mark.asyncio
     @pytest.mark.allow_call_model_methods
     async def test_auto_compact_integration(self):
         """Integration test for auto-compact during get_response."""
-        os.environ['CAI_AUTO_COMPACT'] = 'true'
-        os.environ['CAI_AUTO_COMPACT_THRESHOLD'] = '0.8'
-        
         from openai import AsyncOpenAI
         from openai.types.chat import ChatCompletion, ChatCompletionMessage
         from openai.types.chat.chat_completion import Choice, CompletionUsage
         from cai.sdk.agents.model_settings import ModelSettings
         from cai.sdk.agents.models.interface import ModelTracing
-        
+
         client = AsyncMock(spec=AsyncOpenAI)
         client.base_url = "https://api.openai.com"
-        
-        # Create mock response
+
         mock_response = ChatCompletion(
             id="test-id",
-            object="chat.completion", 
+            object="chat.completion",
             created=1234567890,
             model="gpt-4",
             choices=[
                 Choice(
                     index=0,
                     message=ChatCompletionMessage(
-                        role="assistant",
-                        content="Response after compaction"
+                        role="assistant", content="Response after compaction"
                     ),
-                    finish_reason="stop"
+                    finish_reason="stop",
                 )
             ],
             usage=CompletionUsage(
-                prompt_tokens=200,  # After compaction
+                prompt_tokens=200,
                 completion_tokens=50,
-                total_tokens=250
-            )
+                total_tokens=250,
+            ),
         )
-        
-        with patch('cai.sdk.agents.models.openai_chatcompletions.get_session_recorder'):
+
+        with patch("cai.sdk.agents.models.openai_chatcompletions.get_session_recorder"):
             model = OpenAIChatCompletionsModel(
-                model="gpt-4",
-                openai_client=client,
-                agent_name="Test Agent",
-                agent_id="TEST123"
+                model="gpt-4", openai_client=client, agent_name="Test Agent", agent_id="TEST123"
             )
-            
-            # Mock dependencies
-            with patch.object(model, '_get_model_max_tokens', return_value=1000):
-                with patch('cai.sdk.agents.models.openai_chatcompletions.count_tokens_with_tiktoken') as mock_count:
-                    # First count exceeds threshold, triggers compaction
-                    mock_count.side_effect = [
-                        (850, 0),  # Initial high count
-                        (850, 0),  # Pre-compaction
-                        (200, 0),  # Post-compaction
-                    ]
-                    
-                    with patch('cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE') as mock_memory:
-                        mock_memory._ai_summarize_history = AsyncMock(return_value="Previous summary")
-                        
-                        with patch('cai.repl.commands.memory.COMPACTED_SUMMARIES', {}):
-                            with patch('rich.console.Console'):
-                                # Mock all the timer and tracking functions
-                                with patch('cai.sdk.agents.models.openai_chatcompletions.stop_idle_timer'):
-                                    with patch('cai.sdk.agents.models.openai_chatcompletions.start_active_timer'):
-                                        with patch('cai.sdk.agents.models.openai_chatcompletions.stop_active_timer'):
-                                            with patch('cai.sdk.agents.models.openai_chatcompletions.start_idle_timer'):
-                                                with patch('cai.sdk.agents.models.openai_chatcompletions.COST_TRACKER'):
-                                                    with patch.object(model, '_fetch_response', AsyncMock(return_value=mock_response)):
-                                                        # Call get_response
-                                                        result = await model.get_response(
-                                                            system_instructions=None,
-                                                            input="Test message",
-                                                            model_settings=ModelSettings(),
-                                                            tools=[],
-                                                            output_schema=None,
-                                                            handoffs=[],
-                                                            tracing=ModelTracing.DISABLED
-                                                        )
-                                                        
-                                                        # Verify compaction was triggered
-                                                        mock_memory._ai_summarize_history.assert_called_once()
-                                                        
-                                                        # Verify response was returned
-                                                        assert result is not None
+
+        # Patch the auto_compactor to simulate compaction
+        with (
+            patch(f"{_AC}.get_config", return_value=_make_cfg(True, 0.8)),
+            patch(f"{_AC}.get_model_max_tokens", return_value=1000),
+            patch("cai.repl.commands.memory.MEMORY_COMMAND_INSTANCE") as mock_memory,
+            patch("cai.repl.commands.memory.COMPACTED_SUMMARIES", {}),
+            patch("rich.console.Console"),
+            patch("cai.sdk.agents.models.openai_chatcompletions.stop_idle_timer"),
+            patch("cai.sdk.agents.models.openai_chatcompletions.start_active_timer"),
+            patch("cai.sdk.agents.models.openai_chatcompletions.stop_active_timer"),
+            patch("cai.sdk.agents.models.openai_chatcompletions.start_idle_timer"),
+            patch("cai.sdk.agents.models.openai_chatcompletions.COST_TRACKER"),
+            patch.object(model, "_fetch_response", AsyncMock(return_value=mock_response)),
+            patch(
+                "cai.sdk.agents.models.openai_chatcompletions.count_tokens_with_tiktoken",
+                return_value=(850, 0),
+            ),
+        ):
+            mock_memory._ai_summarize_history = AsyncMock(return_value="Previous summary")
+
+            result = await model.get_response(
+                system_instructions=None,
+                input="Test message",
+                model_settings=ModelSettings(),
+                tools=[],
+                output_schema=None,
+                handoffs=[],
+                tracing=ModelTracing.DISABLED,
+            )
+
+            # Verify compaction was triggered
+            mock_memory._ai_summarize_history.assert_called_once()
+
+            # Verify response was returned
+            assert result is not None
+
+
+def test_cai_config_auto_compact_threshold_capped(monkeypatch):
+    """CAI_AUTO_COMPACT_THRESHOLD above 80% is clamped so auto-compact cannot defer past 0.8."""
+    from cai.config import AUTO_COMPACT_THRESHOLD_MAX, get_config, reset_config
+
+    reset_config()
+    monkeypatch.setenv("CAI_AUTO_COMPACT_THRESHOLD", "0.99")
+    reset_config()
+    try:
+        assert get_config().auto_compact_threshold == AUTO_COMPACT_THRESHOLD_MAX
+    finally:
+        reset_config()
+        monkeypatch.delenv("CAI_AUTO_COMPACT_THRESHOLD", raising=False)

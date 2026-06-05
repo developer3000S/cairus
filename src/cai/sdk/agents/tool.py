@@ -13,7 +13,7 @@ from typing_extensions import Concatenate, ParamSpec
 
 from . import _debug
 from .computer import AsyncComputer, Computer
-from .exceptions import ModelBehaviorError
+from .exceptions import ModelBehaviorError, UserCancelledCommand
 from .function_schema import DocstringStyle, function_schema
 from .items import RunItem
 from .logger import logger
@@ -29,6 +29,7 @@ def truncate_for_logging(output: Any, max_length: int = 1000) -> str:
     if len(output_str) <= max_length:
         return output_str
     return f"{output_str[:max_length]}... (truncated)"
+
 
 ToolParams = ParamSpec("ToolParams")
 
@@ -240,6 +241,13 @@ def function_tool(
                     f"Invalid JSON input for tool {schema.name}: {input}"
                 ) from e
 
+            # Filter out None values so that function defaults are used
+            # LLMs may generate explicit null/None or string "None" for optional parameters
+            json_data = {
+                k: v for k, v in json_data.items()
+                if v is not None and v != "None"
+            }
+
             if _debug.DONT_LOG_TOOL_DATA:
                 logger.debug(f"Invoking tool {schema.name}")
             else:
@@ -268,12 +276,12 @@ def function_tool(
                 # Run synchronous functions in a thread pool to avoid blocking the event loop
                 import asyncio
                 import functools
-                
+
                 if schema.takes_context:
                     func_with_args = functools.partial(the_func, ctx, *args, **kwargs_dict)
                 else:
                     func_with_args = functools.partial(the_func, *args, **kwargs_dict)
-                
+
                 # Run in thread pool executor to prevent blocking
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, func_with_args)
@@ -289,6 +297,8 @@ def function_tool(
             try:
                 return await _on_invoke_tool_impl(ctx, input)
             except Exception as e:
+                if isinstance(e, UserCancelledCommand):
+                    raise
                 if failure_error_function is None:
                     raise
 

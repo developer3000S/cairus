@@ -167,9 +167,9 @@ def handoff(
             against this type. Only relevant if you pass a function that takes an input.
         input_filter: a function that filters the inputs that are passed to the next agent.
     """
-    assert (on_handoff and input_type) or not (on_handoff and input_type), (
-        "You must provide either both on_input and input_type, or neither"
-    )
+    assert (on_handoff and input_type) or not (
+        on_handoff and input_type
+    ), "You must provide either both on_input and input_type, or neither"
     type_adapter: TypeAdapter[Any] | None
     if input_type is not None:
         assert callable(on_handoff), "on_handoff must be callable"
