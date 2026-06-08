@@ -2676,6 +2676,19 @@ class OpenAIChatCompletionsModel(Model):
                         type="response.content_part.done",
                     )
 
+                # Repair partially-streamed function calls before emission so a
+                # truncated args string like "{" cannot poison conversation history
+                # and trigger HTTP 400 on the next request.
+                for _fc in state.function_calls.values():
+                    _args = _fc.arguments or ""
+                    if not _args.strip():
+                        _fc.arguments = "{}"
+                    else:
+                        try:
+                            json.loads(_args)
+                        except (TypeError, ValueError):
+                            _fc.arguments = "{}"
+
                 # Actually send events for the function calls
                 for function_call in state.function_calls.values():
                     # First, a ResponseOutputItemAdded for the function call
