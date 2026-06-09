@@ -132,7 +132,7 @@ def main() -> int:
 
     try:
         with open(args.result_file, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False)
+            json.dump(payload, f, ensure_ascii=False, default=str)
     except Exception as write_error:  # pylint: disable=broad-except
         print(f"[CAI worker] failed to write result file: {write_error}", file=sys.stderr)
         return 2
