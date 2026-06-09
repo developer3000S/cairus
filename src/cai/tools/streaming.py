@@ -125,10 +125,13 @@ def _get_agent_token_info():
         from cai.sdk.agents.models.openai_chatcompletions import ACTIVE_MODEL_INSTANCES
 
         if ACTIVE_MODEL_INSTANCES:
-            # Get the most recent instance (highest instance ID)
-            latest_key = max(ACTIVE_MODEL_INSTANCES.keys(), key=lambda x: x[1])
-            model_ref = ACTIVE_MODEL_INSTANCES[latest_key]
-            model = model_ref() if model_ref else None
+            try:
+                # Get the most recent instance (highest instance ID)
+                latest_key = max(ACTIVE_MODEL_INSTANCES.keys(), key=lambda x: x[1])
+                model_ref = ACTIVE_MODEL_INSTANCES.get(latest_key)
+                model = model_ref() if model_ref else None
+            except Exception:
+                model = None
 
             if model:
                 # Get display name with ID
