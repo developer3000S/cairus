@@ -216,6 +216,7 @@ def get_user_input(command_completer, key_bindings, history_file, toolbar_func, 
         return [sep_line]
 
     # Get user input with all features
+    result = ""
     try:
         result = prompt(
             [("class:prompt", "CAI> ")],
@@ -244,6 +245,15 @@ def get_user_input(command_completer, key_bindings, history_file, toolbar_func, 
         except (AttributeError, OSError):
             _REPL_STDIN_EXHAUSTED_PENDING = True
         return ""
+    finally:
+        # prompt_toolkit restores termios from the snapshot taken after we cleared
+        # ICRNL above; Rich console.input and plain input() then echo Enter as ^M.
+        try:
+            from cai.util.streaming import restore_terminal_state
+
+            restore_terminal_state(emit_trailing_newline=False)
+        except Exception:
+            pass
 
     # Print bottom separator only when user submitted non-empty input,
     # so that empty Enter produces a single separator between prompts.

@@ -33,6 +33,29 @@ class TestMultilinePromptConfig:
             'Without this, Enter may only insert newlines after long agent turns.'
         )
 
+    def test_tty_restored_after_prompt(self):
+        """Cooked TTY must be restored after prompt() for follow-up console.input prompts.
+
+        We clear ICRNL before prompt_toolkit starts; on exit it restores that snapshot,
+        so /compact and other y/N confirmations see Enter as ^M unless we run
+        restore_terminal_state again in a finally block.
+        """
+        from cai.repl.ui.prompt import get_user_input
+        import inspect
+
+        source = inspect.getsource(get_user_input)
+
+        assert 'finally:' in source, (
+            'REGRESSION: get_user_input must use finally to restore the TTY after '
+            'prompt_toolkit exits. Without this, Rich console.input shows ^M on Enter.'
+        )
+        assert source.index('finally:') > source.index('prompt('), (
+            'REGRESSION: TTY restore must run after prompt(), not only before it.'
+        )
+        assert 'restore_terminal_state' in source[source.index('finally:'):], (
+            'REGRESSION: finally block must call restore_terminal_state after prompt().'
+        )
+
     def test_icrnl_cleared_before_prompt(self):
         """ICRNL/INLCR/IGNCR must be cleared before prompt() to keep Enter as submit.
 
