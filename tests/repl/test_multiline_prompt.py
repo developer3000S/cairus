@@ -56,6 +56,17 @@ class TestMultilinePromptConfig:
             'REGRESSION: finally block must call restore_terminal_state after prompt().'
         )
 
+    def test_ensure_cooked_tty_after_stty_sane(self):
+        """stty sane must be followed by explicit cooked termios for y/N prompts."""
+        from cai.util.streaming import _reset_controlling_tty_sane
+        import inspect
+
+        source = inspect.getsource(_reset_controlling_tty_sane)
+        assert 'ensure_cooked_tty' in source, (
+            'REGRESSION: _reset_controlling_tty_sane must call ensure_cooked_tty so '
+            'follow-up console.input accepts Enter instead of echoing ^M.'
+        )
+
     def test_icrnl_cleared_before_prompt(self):
         """ICRNL/INLCR/IGNCR must be cleared before prompt() to keep Enter as submit.
 
