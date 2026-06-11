@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 from cai.repl.commands.base import Command, register_command
+from cai.repl.ui.tty_input import read_repl_yes_no
 from cai.sdk.agents.models.openai_chatcompletions import get_current_active_model
 from cai.repl.commands.model import (
     get_all_predefined_models,
@@ -572,11 +573,7 @@ class CompactCommand(Command):
             f"\n[#9aa0a6][CAI] Compact current conversation? [/]"
             f"[bold white]({msg_count} messages)[/bold white]"
         )
-        confirm = console.input(
-            "[#9aa0a6][CAI] Compact conversation? [/][bold #00ff9d](y/N): [/]"
-        )
-
-        if confirm.lower() == "y":
+        if read_repl_yes_no(console, "Compact conversation?"):
             # Pass the detected agent name to _perform_compaction
             return self._perform_compaction(None, None, agent_name=agent_name)
         else:

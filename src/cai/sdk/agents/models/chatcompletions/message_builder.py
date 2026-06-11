@@ -424,6 +424,18 @@ class Converter:
                         arguments = "{}"
                     elif isinstance(arguments, dict):
                         arguments = json.dumps(arguments)
+                    else:
+                        # Truncated/streamed-then-cut function call args (e.g. "{")
+                        # are not valid JSON and the upstream proxy rejects the whole
+                        # request with HTTP 400, wedging the conversation. Only repair
+                        # half-finished JSON object/array buffers; leave anything else
+                        # (raw concatenated deltas, provider-specific blobs) alone.
+                        stripped = arguments.lstrip() if isinstance(arguments, str) else ""
+                        if stripped and stripped[0] in "{[":
+                            try:
+                                json.loads(arguments)
+                            except (TypeError, ValueError):
+                                arguments = "{}"
                     tool_calls_param.append(
                         ChatCompletionMessageToolCallParam(
                             id=tc.get("id", "")[:40],

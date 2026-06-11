@@ -2676,6 +2676,23 @@ class OpenAIChatCompletionsModel(Model):
                         type="response.content_part.done",
                     )
 
+                # Repair partially-streamed function calls before emission so a
+                # truncated args string like "{" cannot poison conversation history
+                # and trigger HTTP 400 on the next request. Only rewrite when the
+                # buffer is clearly a half-finished JSON object/array; leave other
+                # accumulator contents (raw concatenated deltas, provider quirks)
+                # untouched so the rest of the pipeline can decide.
+                for _fc in state.function_calls.values():
+                    _args = _fc.arguments or ""
+                    _stripped = _args.lstrip()
+                    if not _stripped:
+                        _fc.arguments = "{}"
+                    elif _stripped[0] in "{[":
+                        try:
+                            json.loads(_args)
+                        except (TypeError, ValueError):
+                            _fc.arguments = "{}"
+
                 # Actually send events for the function calls
                 for function_call in state.function_calls.values():
                     # First, a ResponseOutputItemAdded for the function call

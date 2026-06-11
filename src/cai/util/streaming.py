@@ -1386,6 +1386,32 @@ def _reset_controlling_tty_sane() -> None:
         )
     except Exception:
         pass
+    ensure_cooked_tty()
+
+
+def ensure_cooked_tty() -> None:
+    """Force canonical line input so ``input()`` / Rich ``console.input`` accept Enter.
+
+    ``stty sane`` alone is not always enough after prompt_toolkit: it may restore a
+    snapshot taken while ICRNL was cleared, leaving Enter as raw ``\\r`` (shown as ^M).
+    """
+    if not sys.stdin.isatty():
+        return
+    try:
+        import termios
+
+        fd = sys.stdin.fileno()
+        attrs = termios.tcgetattr(fd)
+        iflag, _, _, lflag, _, cc = attrs
+        iflag |= termios.ICRNL | termios.BRKINT
+        iflag &= ~(termios.INLCR | termios.IGNCR)
+        lflag |= termios.ICANON | termios.ECHO | termios.ISIG
+        cc[termios.VMIN] = 1
+        cc[termios.VTIME] = 0
+        termios.tcsetattr(fd, termios.TCSADRAIN, (iflag, attrs[1], attrs[2], lflag, attrs[4], cc))
+        termios.tcflush(fd, termios.TCIFLUSH)
+    except Exception:
+        pass
 
 
 def restore_terminal_state(
