@@ -30,7 +30,6 @@ def read_repl_line(
 ) -> str:
     """Read one line using prompt_toolkit (same stack as the CAI> prompt)."""
     from prompt_toolkit import prompt as ptk_prompt
-    from prompt_toolkit.formatted_text import HTML
 
     _restore_tty_after_prompt()
     try:
