@@ -20,29 +20,29 @@ class TestNormalizeReplLine:
 
 
 class TestReadReplYesNo:
-    @patch("cai.repl.ui.tty_input.input", return_value="y\r")
-    @patch("cai.repl.ui.tty_input.prepare_tty_for_line_input")
-    def test_yes_with_carriage_return(self, _prepare, _input):
+    @patch("prompt_toolkit.prompt", return_value="y\r")
+    @patch("cai.repl.ui.tty_input._restore_tty_after_prompt")
+    def test_yes_with_carriage_return(self, _restore, _prompt):
         console = MagicMock()
-        assert read_repl_yes_no(console, "Continue? (y/N): ") is True
+        assert read_repl_yes_no(console, "Continue") is True
 
-    @patch("cai.repl.ui.tty_input.input", return_value="")
-    @patch("cai.repl.ui.tty_input.prepare_tty_for_line_input")
-    def test_empty_defaults_to_no(self, _prepare, _input):
+    @patch("prompt_toolkit.prompt", return_value="")
+    @patch("cai.repl.ui.tty_input._restore_tty_after_prompt")
+    def test_empty_defaults_to_no(self, _restore, _prompt):
         console = MagicMock()
-        assert read_repl_yes_no(console, "Continue? (y/N): ", default=False) is False
+        assert read_repl_yes_no(console, "Continue", default=False) is False
 
-    @patch("cai.repl.ui.tty_input.input", return_value="n")
-    @patch("cai.repl.ui.tty_input.prepare_tty_for_line_input")
-    def test_no_answer(self, _prepare, _input):
+    @patch("prompt_toolkit.prompt", return_value="n")
+    @patch("cai.repl.ui.tty_input._restore_tty_after_prompt")
+    def test_no_answer(self, _restore, _prompt):
         console = MagicMock()
-        assert read_repl_yes_no(console, "Continue? (y/N): ") is False
+        assert read_repl_yes_no(console, "Continue") is False
 
 
 class TestReadReplLine:
-    @patch("cai.repl.ui.tty_input.input", return_value="RESET\r")
-    @patch("cai.repl.ui.tty_input.prepare_tty_for_line_input")
-    def test_prepares_tty_before_read(self, prepare, _input):
+    @patch("prompt_toolkit.prompt", return_value="RESET\r")
+    @patch("cai.repl.ui.tty_input._restore_tty_after_prompt")
+    def test_restores_tty_around_prompt(self, restore, _prompt):
         console = MagicMock()
-        assert read_repl_line(console, "> ") == "RESET"
-        prepare.assert_called_once()
+        assert read_repl_line(console, "> ", markup=False) == "RESET"
+        assert restore.call_count == 2

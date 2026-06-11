@@ -573,10 +573,7 @@ class CompactCommand(Command):
             f"\n[#9aa0a6][CAI] Compact current conversation? [/]"
             f"[bold white]({msg_count} messages)[/bold white]"
         )
-        if read_repl_yes_no(
-            console,
-            "[#9aa0a6][CAI] Compact conversation? [/][bold #00ff9d](y/N): [/]",
-        ):
+        if read_repl_yes_no(console, "Compact conversation?"):
             # Pass the detected agent name to _perform_compaction
             return self._perform_compaction(None, None, agent_name=agent_name)
         else:
