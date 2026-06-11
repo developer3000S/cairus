@@ -43,6 +43,9 @@ _MAX_DELAY = 30.0   # cap in seconds
 # HTTP status codes that trigger automatic retry
 _RETRYABLE_STATUS = {429, 502, 503, 504, 529}
 
+# User-facing label — never embed gateway URLs in exception text shown in the REPL.
+_LLM_SERVER_LABEL = "Alias Robotics® LLM servers"
+
 _LOG = logging.getLogger(__name__)
 
 
@@ -197,11 +200,17 @@ async def direct_httpx_completion(
                                 # Retries exhausted — raise typed error
                                 if resp.status_code == 429:
                                     raise LLMRateLimited(
-                                        f"Rate limited (429) after {_MAX_RETRIES} retries from {url}",
+                                        (
+                                            f"Rate limited (429) after {_MAX_RETRIES} retries "
+                                            f"from {_LLM_SERVER_LABEL}"
+                                        ),
                                         retry_after=_extract_retry_after(resp),
                                     )
                                 raise LLMProviderUnavailable(
-                                    f"Server error ({resp.status_code}) after {_MAX_RETRIES} retries from {url}"
+                                    (
+                                        f"Server error ({resp.status_code}) after "
+                                        f"{_MAX_RETRIES} retries from {_LLM_SERVER_LABEL}"
+                                    )
                                 )
 
                             # HTTP 413: request body exceeds gateway/proxy POST
@@ -215,7 +224,7 @@ async def direct_httpx_completion(
                                     pass
                                 _log_failed_completion_response(resp, url)
                                 raise LLMContextOverflow(
-                                    f"Request body too large (413) for {url}",
+                                    f"Request body too large (413) for {_LLM_SERVER_LABEL}",
                                     details=_build_413_details(url, body),
                                 )
 
@@ -312,11 +321,11 @@ async def direct_httpx_completion(
                             continue
                         if e.response.status_code == 429:
                             raise LLMRateLimited(
-                                f"Rate limited (429) after retries from {url}"
+                                f"Rate limited (429) after retries from {_LLM_SERVER_LABEL}"
                             ) from e
                         if e.response.status_code in (408, 504):
                             raise LLMTimeout(
-                                f"Timeout ({e.response.status_code}) from {url}"
+                                f"Timeout ({e.response.status_code}) from {_LLM_SERVER_LABEL}"
                             ) from e
                         raise
 
@@ -368,19 +377,28 @@ async def direct_httpx_completion(
                         # Retries exhausted — raise typed error
                         if resp.status_code == 429:
                             raise LLMRateLimited(
-                                f"Rate limited (429) after {_MAX_RETRIES} retries from {url}",
+                                (
+                                    f"Rate limited (429) after {_MAX_RETRIES} retries "
+                                    f"from {_LLM_SERVER_LABEL}"
+                                ),
                                 retry_after=_extract_retry_after(resp),
                             )
                         if resp.status_code in (408, 504):
                             raise LLMTimeout(
-                                f"Timeout ({resp.status_code}) after {_MAX_RETRIES} retries from {url}"
+                                (
+                                    f"Timeout ({resp.status_code}) after {_MAX_RETRIES} "
+                                    f"retries from {_LLM_SERVER_LABEL}"
+                                )
                             )
                         raise LLMProviderUnavailable(
-                            f"Server error ({resp.status_code}) after {_MAX_RETRIES} retries from {url}"
+                            (
+                                f"Server error ({resp.status_code}) after "
+                                f"{_MAX_RETRIES} retries from {_LLM_SERVER_LABEL}"
+                            )
                         )
 
                     if resp.status_code in (408,):
-                        raise LLMTimeout(f"Timeout ({resp.status_code}) from {url}")
+                        raise LLMTimeout(f"Timeout ({resp.status_code}) from {_LLM_SERVER_LABEL}")
 
                     # HTTP 413: request body exceeds gateway/proxy POST size cap.
                     # Not in _RETRYABLE_STATUS because resending the same body
@@ -390,7 +408,7 @@ async def direct_httpx_completion(
                     if resp.status_code == 413:
                         _log_failed_completion_response(resp, url)
                         raise LLMContextOverflow(
-                            f"Request body too large (413) for {url}",
+                            f"Request body too large (413) for {_LLM_SERVER_LABEL}",
                             details=_build_413_details(url, body),
                         )
 
@@ -422,4 +440,4 @@ async def direct_httpx_completion(
             # Should not reach here
             if last_error:
                 raise last_error
-            raise LLMProviderUnavailable(f"All retries exhausted for {url}")
+            raise LLMProviderUnavailable(f"All retries exhausted for {_LLM_SERVER_LABEL}")
