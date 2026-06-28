@@ -1,36 +1,36 @@
-# Examples
+# Примеры
 
-Check out a variety of sample implementations of the SDK in the examples section of the [repo](https://github.com/openai/openai-agents-python/tree/main/examples). The examples are organized into several categories that demonstrate different patterns and capabilities.
+Ознакомьтесь с различными примерами использования SDK в разделе `examples` репозитория: [repo](https://github.com/openai/openai-agents-python/tree/main/examples). Примеры организованы по категориям, демонстрирующим разные паттерны и возможности.
 
 
-## Categories
+## Категории
 
 - **agent_patterns:**
-  Examples in this category illustrate common agent design patterns, such as
-  
-    - Deterministic workflows
-    - Agents as tools
-    - Parallel agent execution
+  Примеры в этой категории иллюстрируют общие шаблоны проектирования агентов, такие как
+
+    - Детерминированные рабочие процессы
+    - Агенты как инструменты
+    - Параллельное выполнение агентов
 
 - **basic:**
-  These examples showcase foundational capabilities of the SDK, such as
-  
-    - Dynamic system prompts
-    - Streaming outputs
-    - Lifecycle events
+  Базовые примеры, показывающие основные возможности SDK, например
+
+    - Динамические системные подсказки
+    - Потоковый вывод
+    - События жизненного цикла
 
 - **tool examples:**
-  Learn how to implement OAI hosted tools such as web search and file search,
-   and integrate them into your agents.
+  Как реализовать размещённые в облаке инструменты (например, веб-поиск и поиск по файлам)
+  и интегрировать их в агенты.
 
 - **model providers:**
-  Explore how to use non-OpenAI models with the SDK.
+  Примеры использования моделей не-OpenAI с SDK.
 
 - **handoffs:**
-  See practical examples of agent handoffs.
+  Практические примеры передачи управления между агентами.
 
-- **customer_service** and **research_bot:**
-  Two more built-out examples that illustrate real-world applications
-  
-    - **customer_service**: Example customer service system for an airline.
-    - **research_bot**: Simple deep research clone.
+- **customer_service** и **research_bot:**
+  Два полнофункциональных примера, демонстрирующих реальные сценарии применения
+
+    - **customer_service**: Пример системы поддержки клиентов для авиакомпании.
+    - **research_bot**: Простой бот для глубинного исследования.

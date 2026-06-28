@@ -53,102 +53,160 @@
     Make sure this has been addressed and also that the Dev Container is not forwarding the 8000 port (click on x, if necessary in the ports section).
     
     To verify connection, from within the VSCode devcontainer:
-    ```bash
-    curl -v http://host.docker.internal:8000/api/version
-    ```
+    ````markdown
+    ??? question "OLLAMA возвращает ошибки 404"
 
-??? question "Run CAI against any target"
-
-    ![cai-004-first-message](media/cai-004-first-message.png)
+        API Ollama в режиме OpenAI использует путь `/v1/chat/completions`, тогда как библиотека `openai` по умолчанию использует `base_url` + `/chat/completions`.
     
-    The starting user prompt in this case is: `Target IP: 192.168.3.10, perform a full network scan`.
+        Мы применяем второй подход для совместимости с сообществом генеративного ИИ, но позволяем пользователям включать `v1` самостоятельно, указав:
     
-    The agent started performing a nmap scan. You could either interact with the agent and give it more instructions, or let it run to see what it explores next.
-
-??? question "How do I interact with the agent? Type twice CTRL + C"
-
-    ![cai-005-ctrl-c](media/cai-005-ctrl-c.png)
-    
-    If you want to use the HITL mode, you can do it by presssing twice ```Ctrl + C```.
-    This will allow you to interact (prompt) with the agent whenever you want. The agent will not lose the previous context, as it is stored in the `history` variable, which is passed to it and any agent that is called. This enables any agent to use the previous information and be more accurate and efficient.
-
-??? question "Can I change the model while CAI is running? /model"
-
-    Use ```/model``` to change the model.
-    
-    ![cai-007-model-change](media/cai-007-model-change.png)
-
-??? question "How can I list all the agents available? /agent"
-
-    Use ```/agent``` to list all the agents available.
-    
-    ![cai-010-agents-menu](media/cai-010-agents-menu.png)
-
-??? question "Where can I list all the environment variables? /env"
-
-    Use **`/env list`** to see all catalog variables with **current values** and index numbers for **`/env set`**. Use bare **`/env`** for **`CAI_*`** / **`CTF_*`** values in the current session only.
-    
-    For **full documentation tables** (defaults, constraints, when each applies), run bare **`/help`** and scroll past the quick guide. **`/help topics`** lists slash commands by category and how to open **`/help <topic>`** panels (no env tables). For **one variable** in depth, use **`/help var VARIABLE_NAME`** (e.g. `/help var CAI_DEBUG`).
-    
-    The same topics are covered on the site in [Environment Variables](environment_variables.md).
-    
-    ![cai-008-config](media/cai-008-config.png)
-
-??? question "How to know more about the CLI? /help"
-
-    In the **CLI headless** REPL, type **`?`** alone for a compact **input shortcuts** panel. **`/?`** is an alias for **`/help`** (full guide and env tables when bare).
-
-    ![cai-006-help](media/cai-006-help.png)
-    
-
-??? question "Can I expand CAI capabilities using previous run logs?"
-
-    Absolutely! The **/load command** allows you to use a previously sucessful runs ( the log object is stored as a **.jsonl file in the [log](cai/logs) folder** ) in a new run against the same target.
-    
-    How to make use of this functionality?
-    
-    1. Run CAI against the target. Let's assume the target name is: `target001`.
-    2. Get the log file path, something like: ```logs/cai_20250408_111856.jsonl```
-    3. Start cai again and select the jsonl file:
-    
-    ![cai-011-load-command](media/cai-011-load-command.png)
-
-??? question "Can I expand CAI capabilities using scripts or extra information?"
-
-    Currently, CAI supports text based information. You can add any extra information on the target you are facing by copy-pasting it directly into the system or user prompt.
-    
-    **How?** By adding it to the system ([`system_master_template.md`](cai/repl/templates/system_master_template.md)) or the user prompt ([`user_master_template.md`](cai/repl/templates/user_master_template.md)). You can always directly prompt the path to the model, and it will ```cat``` it.
-
-??? question "How do I run the documentation locally?"
-
-    To view and edit the documentation locally, you can use [MkDocs](https://www.mkdocs.org/), which is a static site generator for project documentation.
-    
-    **Steps:**
-    
-    1. **Install MkDocs and the Material theme:**
         ```bash
-        pip install mkdocs mkdocs-material
+        OLLAMA_API_BASE=http://IP:PORT/v1
         ```
     
-    2. **Serve the documentation locally:**
+        Подробнее по теме см. обсуждения: [#76](https://github.com/aliasrobotics/cai/issues/76), [#83](https://github.com/aliasrobotics/cai/issues/83) и [#82](https://github.com/aliasrobotics/cai/issues/82)
+
+
+    ??? question "Куда делись caiextensions?"
+        В настоящий момент расширения недоступны, поскольку они в значительной степени интегрированы или находятся в процессе интеграции в основную архитектуру. Мы планируем полностью объединить функциональность в следующем релизе. Скоро!
+
+    ??? question "Как настроить SSH‑доступ для GitLab?"
+
+        Сгенерируйте новый SSH‑ключ:
         ```bash
-         python -m mkdocs serve
+        ssh-keygen -t ed25519
         ```
-        This will start a local server (usually at [http://127.0.0.1:8000](http://127.0.0.1:8000)) where you can view the docs in your browser.
     
-    3. **Build the static site (optional):**
+        Добавьте ключ в SSH‑агент:
         ```bash
-        mkdocs build
+        ssh-add ~/.ssh/id_ed25519
         ```
-        This will generate a `site/` directory with the static HTML files.
     
-    For more details, see the [MkDocs documentation](https://www.mkdocs.org/user-guide/).
+        Добавьте публичный ключ в GitLab
+        Скопируйте ключ и добавьте его в GitLab: https://gitlab.com/-/user_settings/ssh_keys
+        ```bash
+        cat ~/.ssh/id_ed25519.pub
+        ```
+    
+        Для проверки выполните:
+        ```bash
+        ssh -T git@gitlab.com
+        Welcome to GitLab, @vmayoral!
+        ```
 
-??? question "How CAI licence works?"
+    ??? question "Как очистить кэш Python?"
 
-    CAI’s current license does not restrict usage for research purposes. You are free to use CAI for security assessments (pentests), to develop additional features, and to integrate it into your research activities, as long as you comply with local laws.
+        ```bash
+        find . -name "*.pyc" -delete && find . -name "__pycache__" -delete
+        ```
 
-    If you or your organization start benefiting commercially from CAI (e.g., offering pentesting services powered by CAI), then a commercial license will be required to help sustain the project.
+    ??? question "Если host networking не работает с Ollama — проверьте, не отключено ли оно в Docker из‑за незалогиненного аккаунта"
 
-    CAI itself is not a profit-seeking initiative. Our goal is to build a sustainable open-source project. We simply ask that those who profit from CAI contribute back and support our ongoing development.
+        Docker на macOS иногда ведёт себя нестабильно. Проверьте, появлялось ли сообщение:
+    
+        *Host networking has been disabled because you are not signed in. Please sign in to enable it.*
+    
+        Убедитесь, что это исправлено, и что Dev Container не пробрасывает порт 8000 (при необходимости закройте его в разделе портов).
+    
+        Для проверки соединения внутри VSCode devcontainer выполните:
+        ```bash
+        curl -v http://host.docker.internal:8000/api/version
+        ```
+
+    ??? question "Запустить CAI против любой цели"
+
+        ![cai-004-first-message](media/cai-004-first-message.png)
+    
+        Начальная подсказка пользователя в этом примере: `Target IP: 192.168.3.10, perform a full network scan`.
+    
+        Агент запускает nmap‑сканирование. Вы можете взаимодействовать с агентом и давать дополнительные указания, либо позволить ему продолжить и посмотреть результаты.
+
+    ??? question "Как взаимодействовать с агентом? Нажмите дважды CTRL + C"
+
+        ![cai-005-ctrl-c](media/cai-005-ctrl-c.png)
+    
+        Чтобы включить режим HITL, нажмите дважды ```Ctrl + C```. Это позволит вам в любой момент взаимодействовать (вводить подсказки) с агентом. Агент не потеряет предыдущий контекст — он хранится в переменной `history`, которая передаётся агенту и любым вызываемым агентам. Это позволяет им использовать предшествующую информацию для большей точности и эффективности.
+
+    ??? question "Можно ли сменить модель во время работы CAI? /model"
+
+        Используйте ```/model``` для смены модели.
+    
+        ![cai-007-model-change](media/cai-007-model-change.png)
+
+    ??? question "Как вывести список доступных агентов? /agent"
+
+        Используйте ```/agent``` для отображения всех доступных агентов.
+    
+        ![cai-010-agents-menu](media/cai-010-agents-menu.png)
+
+    ??? question "Где вывести все переменные окружения? /env"
+
+        Используйте **`/env list`**, чтобы увидеть все каталожные переменные с **текущими значениями** и индексами для использования с **`/env set`**. Команда **`/env`** без аргументов показывает **`CAI_*`** / **`CTF_*`** значения только для текущей сессии.
+    
+        Для **полных таблиц документации** (значения по умолчанию, ограничения, области применения) выполните **`/help`** и прокрутите мимо краткого руководства. **`/help topics`** выводит списки слэш‑команд по категориям и способы открытия панелей **`/help <topic>`** (без таблиц env). Для детальной информации по одной переменной используйте **`/help var VARIABLE_NAME`** (например `/help var CAI_DEBUG`).
+    
+        Те же темы освещены на сайте в разделе [Environment Variables](environment_variables.md).
+    
+        ![cai-008-config](media/cai-008-config.png)
+
+    ??? question "Как узнать больше про CLI? /help"
+
+        В безголовом REPL CLI введите **`?`** для компактной панели сочетаний ввода. **`/?`** — это псевдоним для **`/help`** (полное руководство и таблицы env при вызове без аргументов).
+
+        ![cai-006-help](media/cai-006-help.png)
+    
+
+    ??? question "Можно ли расширить возможности CAI, используя логи предыдущих запусков?"
+
+        Конечно! Команда **/load** позволяет загрузить результаты предыдущего успешного запуска (объект лога хранится как **.jsonl‑файл в папке [logs](cai/logs)**) и использовать их в новом запуске против той же цели.
+    
+        Как это сделать:
+    
+        1. Запустите CAI против цели (например, `target001`).
+        2. Найдите путь к файлу лога, например: ```logs/cai_20250408_111856.jsonl```
+        3. Запустите CAI снова и выберите этот jsonl‑файл:
+    
+        ![cai-011-load-command](media/cai-011-load-command.png)
+
+    ??? question "Можно ли расширить возможности CAI с помощью скриптов или доп. информации?"
+
+        В настоящее время CAI поддерживает текстовую информацию. Вы можете добавить любую дополнительную информацию о целевом объекте, вставив её прямо в системную или пользовательскую подсказку.
+    
+        **Как?** Добавьте её в системный шаблон ([`system_master_template.md`](cai/repl/templates/system_master_template.md)) или в пользовательский шаблон ([`user_master_template.md`](cai/repl/templates/user_master_template.md)). Также можно указать путь к файлу в подсказке — агент выполнит `cat` и прочитает содержимое.
+
+    ??? question "Как запустить документацию локально?"
+
+        Для просмотра и редактирования документации локально можно использовать [MkDocs](https://www.mkdocs.org/) — генератор статических сайтов для документации проектов.
+    
+        **Шаги:**
+    
+        1. **Установите MkDocs и тему Material:**
+            ```bash
+            pip install mkdocs mkdocs-material
+            ```
+    
+        2. **Запустите локальный сервер для документации:**
+            ```bash
+             python -m mkdocs serve
+            ```
+            Обычно сервер будет доступен по адресу [http://127.0.0.1:8000](http://127.0.0.1:8000).
+    
+        3. **Соберите статический сайт (опционально):**
+            ```bash
+            mkdocs build
+            ```
+            Команда создаст директорию `site/` со статическими HTML‑файлами.
+    
+        Подробнее в [документации MkDocs](https://www.mkdocs.org/user-guide/).
+
+    ??? question "Как работает лицензия CAI?"
+
+        Текущая лицензия CAI не ограничивает использование в исследовательских целях. Вы можете использовать CAI для оценок безопасности (pentest), разработки дополнительных функций и интеграции в исследовательские проекты при соблюдении местного законодательства.
+
+        Если вы или ваша организация начнёте извлекать коммерческую выгоду из использования CAI (например, предоставлять платные услуги по pentesting на базе CAI), потребуется коммерческая лицензия для поддержки проекта.
+
+        CAI не является инициативой, ориентированной на извлечение прибыли. Наша цель — создать устойчивый проект с открытым исходным кодом. Мы просим тех, кто получает коммерческую выгоду, вносить вклад и поддерживать дальнейшую разработку.
+
+
+    ````
 

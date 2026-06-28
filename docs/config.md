@@ -1,8 +1,8 @@
-# Configuring the SDK
+# Настройка SDK
 
-## API keys and clients
+## API-ключи и клиенты
 
-By default, the SDK looks for the `OPENAI_API_KEY` environment variable for LLM requests and tracing, as soon as it is imported. If you are unable to set that environment variable before your app starts, you can use the [`set_default_openai_key()`][cai.sdk.agents.set_default_openai_key] function to set the key.
+По умолчанию SDK ищет переменную окружения `OPENAI_API_KEY` для запросов к LLM и трассировки сразу при импорте. Если вы не можете установить эту переменную окружения до старта приложения, вы можете вызвать функцию `set_default_openai_key()` для задания ключа.
 
 ```python
 from cai.sdk.agents import set_default_openai_key
@@ -10,7 +10,7 @@ from cai.sdk.agents import set_default_openai_key
 set_default_openai_key("sk-...")
 ```
 
-Alternatively, you can also configure an OpenAI client to be used. By default, the SDK creates an `AsyncOpenAI` instance, using the API key from the environment variable or the default key set above. You can change this by using the [`set_default_openai_client()`][cai.sdk.agents.set_default_openai_client] function.
+Также можно настроить собственный клиент OpenAI. По умолчанию SDK создаёт экземпляр `AsyncOpenAI`, используя API-ключ из переменной окружения или ключ, заданный выше. Вы можете заменить клиент, вызвав функцию `set_default_openai_client()`.
 
 ```python
 from openai import AsyncOpenAI
@@ -20,7 +20,7 @@ custom_client = AsyncOpenAI(base_url="...", api_key="...")
 set_default_openai_client(custom_client)
 ```
 
-Finally, you can also customize the OpenAI API that is used. By default, we use the OpenAI Responses API. You can override this to use the Chat Completions API by using the [`set_default_openai_api()`][cai.sdk.agents.set_default_openai_api] function.
+Наконец, можно выбрать, какой API OpenAI использовать. По умолчанию используется Responses API. Для переключения на Chat Completions используйте `set_default_openai_api()`.
 
 ```python
 from cai.sdk.agents import set_default_openai_api
@@ -28,9 +28,9 @@ from cai.sdk.agents import set_default_openai_api
 set_default_openai_api("chat_completions")
 ```
 
-## Tracing
+## Трассировка
 
-Tracing is enabled by default. It uses the OpenAI API keys from the section above by default (i.e. the environment variable or the default key you set). You can specifically set the API key used for tracing by using the [`set_tracing_export_api_key`][cai.sdk.agents.set_tracing_export_api_key] function.
+Трассировка включена по умолчанию. Она использует OpenAI API-ключи, указанные выше (переменная окружения или заданный по умолчанию ключ). Вы можете задать отдельный API-ключ для экспорта трассировки с помощью функции `set_tracing_export_api_key`.
 
 ```python
 from cai.sdk.agents import set_tracing_export_api_key
@@ -38,7 +38,7 @@ from cai.sdk.agents import set_tracing_export_api_key
 set_tracing_export_api_key("sk-...")
 ```
 
-You can also disable tracing entirely by using the [`set_tracing_disabled()`][cai.sdk.agents.set_tracing_disabled] function.
+Трассировку также можно полностью отключить, вызвав `set_tracing_disabled()`.
 
 ```python
 from cai.sdk.agents import set_tracing_disabled
@@ -46,11 +46,11 @@ from cai.sdk.agents import set_tracing_disabled
 set_tracing_disabled(True)
 ```
 
-## Debug logging
+## Отладочные логи
 
-The SDK has two Python loggers without any handlers set. By default, this means that warnings and errors are sent to `stdout`, but other logs are suppressed.
+SDK предоставляет два Python-логгера без настроенных обработчиков. По умолчанию предупреждения и ошибки направляются в `stdout`, а остальные логи подавляются.
 
-To enable verbose logging, use the [`enable_verbose_stdout_logging()`][cai.sdk.agents.enable_verbose_stdout_logging] function.
+Чтобы включить подробный вывод в `stdout`, используйте `enable_verbose_stdout_logging()`.
 
 ```python
 from cai.sdk.agents import enable_verbose_stdout_logging
@@ -58,36 +58,36 @@ from cai.sdk.agents import enable_verbose_stdout_logging
 enable_verbose_stdout_logging()
 ```
 
-Alternatively, you can customize the logs by adding handlers, filters, formatters, etc. You can read more in the [Python logging guide](https://docs.python.org/3/howto/logging.html).
+В качестве альтернативы вы можете самостоятельно настроить логирование (обработчики, фильтры, форматтеры и т.д.). Больше информации в руководстве по [логированию Python](https://docs.python.org/3/howto/logging.html).
 
 ```python
 import logging
 
-logger =  logging.getLogger("openai.agents") # or openai.agents.tracing for the Tracing logger
+logger =  logging.getLogger("openai.agents") # или openai.agents.tracing для логгера трассировки
 
-# To make all logs show up
+# Чтобы видеть все логи
 logger.setLevel(logging.DEBUG)
-# To make info and above show up
+# Чтобы видеть info и выше
 logger.setLevel(logging.INFO)
-# To make warning and above show up
+# Чтобы видеть warning и выше
 logger.setLevel(logging.WARNING)
-# etc
+# и т.д.
 
-# You can customize this as needed, but this will output to `stderr` by default
+# По умолчанию вывод будет в `stderr`
 logger.addHandler(logging.StreamHandler())
 ```
 
-### Sensitive data in logs
+### Чувствительные данные в логах
 
-Certain logs may contain sensitive data (for example, user data). If you want to disable this data from being logged, set the following environment variables.
+Некоторые логи могут содержать чувствительные данные (например, данные пользователей). Чтобы запретить логирование таких данных, установите соответствующие переменные окружения.
 
-To disable logging LLM inputs and outputs:
+Чтобы отключить логирование входных и выходных данных моделей:
 
 ```bash
 export OPENAI_AGENTS_DONT_LOG_MODEL_DATA=1
 ```
 
-To disable logging tool inputs and outputs:
+Чтобы отключить логирование входных и выходных данных инструментов:
 
 ```bash
 export OPENAI_AGENTS_DONT_LOG_TOOL_DATA=1
