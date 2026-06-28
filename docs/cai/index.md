@@ -33,7 +33,8 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2504.06017-b31b1b.svg)](https://arxiv.org/pdf/2504.06017)
 </div>
 
-A lightweight, ergonomic framework for building bug bounty-ready Cybersecurity AIs (CAIs).
+Лёгкий, удобный фреймворк для создания ИИ-систем по кибербезопасности, готовых к Bug Bounty (CAI).
+
 
 | CAI with `alias0` on ROS message injection attacks in MiR-100 robot | CAI with `alias0` on API vulnerability discovery at Mercado Libre |
 |-----------------------------------------------|---------------------------------|

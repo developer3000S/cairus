@@ -42,11 +42,32 @@ nav:
       - Handoffs: handoffs.md
       - Multi-Agent Systems: multi_agent.md
 
-<<<<<<< HEAD
-=======
-  # ========================================
+  - Models & Providers:
+      - Available Models: cai_list_of_models.md
+      - Model Providers:
+          - OpenRouter: providers/openrouter.md
+          - Ollama: providers/ollama.md
+          - Azure OpenAI: providers/azure.md
+
+
+  # =================================
+  # GUIDES
+  # =================================
+  - Guides:
+      - Running Agents: running_agents.md
+      - Continue Mode: continue_mode.md
+      - Session Resume: session_resume.md
+      - Working with Results: results.md
+      - Streaming: streaming.md
+      - Tracing & Debugging: tracing.md
+      - Context Management: context.md
+      - Guardrails & Security: guardrails.md
+      - Environment Variables: environment_variables.md
+
+
+  # =================================
   # MODELS & PROVIDERS (REORGANIZADO)
-  # ========================================
+  # =================================
   - Models & Providers:
       # TODO: Crear página destacada para Alias Models
       # - '⭐ Alias Models (CAI PRO)': cai_alias_models.md
@@ -56,9 +77,9 @@ nav:
           - Ollama: providers/ollama.md
           - Azure OpenAI: providers/azure.md
 
-  # ========================================
+  # =================================
   # GUIDES
-  # ========================================
+  # =================================
   - Guides:
       - Running Agents: running_agents.md
       - Continue Mode: continue_mode.md
@@ -71,10 +92,10 @@ nav:
       - LLM Council: council.md
       - Environment Variables: environment_variables.md
 
-  # ========================================
+  # =================================
   # BENCHMARKING (CREDIBILIDAD)
-  # ========================================
->>>>>>> origin/docs_session_resume
+  # =================================
+
   - Benchmarking:
       - Overview: benchmarking/overview.md
       - Running Benchmarks: benchmarking/running_benchmarks.md

@@ -1,4 +1,6 @@
-# Available Models
+# Доступные модели
+
+
 
 The **Cybersecurity AI (CAI)** platform provides seamless integration with multiple Large Language Models (LLMs). This functionality allows users to leverage state-of-the-art AI capabilities for various cybersecurity tasks. CAI acts as a bridge between your security workflows and a wide range of LLMs, enhancing both flexibility and performance of AI agents.
 
@@ -6,11 +8,13 @@ The **Cybersecurity AI (CAI)** platform provides seamless integration with multi
 
 ## 🚀 Alias Robotics Models (CAI PRO Exclusive)
 
-### `alias1` - State-of-the-Art Cybersecurity Model
+### `alias1` — Флагманская модель кибербезопасности
+
 
 <div class="highlight-box" markdown>
 
-**The most advanced cybersecurity AI model available.**
+**Самая передовая доступная ИИ-модель в области кибербезопасности.**
+
 
 `alias1` is our flagship 500B-parameter model, specifically trained and optimized for offensive and defensive security operations. Available exclusively with **[CAI PRO](cai_pro.md)**.
 

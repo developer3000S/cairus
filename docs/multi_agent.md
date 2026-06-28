@@ -1,37 +1,37 @@
-# Orchestrating multiple agents
+# Оркестрация нескольких агентов
 
-Orchestration refers to the flow of agents in your app. Which agents run, in what order, and how do they decide what happens next? There are two main ways to orchestrate agents:
+Оркестрация относится к потоку выполнения агентов в вашем приложении. Какие агенты запускаются, в каком порядке и как они решают, что происходит дальше? Есть два основных способа оркестрации агентов:
 
-1. Allowing the LLM to make decisions: this uses the intelligence of an LLM to plan, reason, and decide on what steps to take based on that.
-2. Orchestrating via code: determining the flow of agents via your code.
+1. Разрешить LLM принимать решения: это использует “интеллект” LLM для планирования, рассуждений и выбора шагов на основе этого.
+2. Оркестрация через код: определение потока выполнения агентов через ваш код.
 
-You can mix and match these patterns. Each has their own tradeoffs, described below.
+Вы можете комбинировать эти подходы. У каждого из них есть свои компромиссы — описанные ниже.
 
-We have a number of examples in examples/cai/agent_patterns.
+Мы также используем несколько примеров в `examples/cai/agent_patterns`.
 
-#### ◉ Orchestrating via LLM
+#### ◉ Оркестрация через LLM
 
-An agent is an LLM equipped with instructions, tools and handoffs. This means that given an open-ended task, the LLM can autonomously plan how it will tackle the task, using [tools](tools.md) to take actions and acquire data, and using [handoffs](handoffs.md) to delegate tasks to sub-agents. 
+Агент — это LLM, оснащённая инструкциями, tools и handoffs. Это означает, что при наличии открытой задачи LLM может автономно спланировать, как она будет решать задачу: используя [tools](tools.md) для выполнения действий и получения данных, и используя [handoffs](handoffs.md) для делегирования задач под-агентам.
 
-You could also use an agent as a tool. The agents operates independently on its provided input —without access to prior conversation history or "taking over" the conversation - completes its specific task, and returns the result to the calling (parent) agent.
+Вы также можете использовать агента как инструмент. Агенты работают независимо со своим входным набором — без доступа к предыдущей истории разговора и без “перехвата” беседы — завершая свою конкретную задачу и возвращая результат вызывающему (родительскому) агенту.
 
+#### ◉ Оркестрация через код
 
-#### ◉ Orchestrating via code
+Хотя оркестрация через LLM мощная, оркестрация через код делает задачи более детерминированными и предсказуемыми — по скорости, стоимости и производительности. Типичные паттерны здесь:
 
-While orchestrating via LLM is powerful, orchestrating via code makes tasks more deterministic and predictable, in terms of speed, cost and performance. Common patterns here are:
+- Использование структурированных выходов для генерации корректно сформированных данных, которые можно проверять своим кодом.
 
-- Using structured outputs to generate well formed data that you can inspect with your code. 
+- Использование детерминированного паттерна: разбиение задачи на серию более мелких шагов. Последовательно “чейните” несколько агентов: каждый шаг выполняется агентом, а выходные данные одного агента используются как вход для следующего.
 
-- Using a determinitstic pattern: Breaking down a task into a series of smaller steps. Chaining multiple agents, each step can be performed by an agent, and the output of one agent is used as input to the next. 
+- Использование [Guardrails](guardrails.md) и LLM_as_judge: агенты, которые оценивают и предоставляют обратную связь, пока входы/выходы не будут соответствовать заданным критериям. Таким образом агент гарантирует уместность входов/выходов.
 
-- Using [Guardrails](guardrails.md) and LLM_as_judge: They are agents that evaluates and provides feedback, until they says the inputs/outputs passes certain criteria. The agent ensures inputs/outputs are appropriate.
-
-- Paralelization of task: Running multiple agents in parallel. This is useful for speed when you have multiple tasks that don't depend on each other.
+- Параллельное выполнение задач: запуск нескольких агентов параллельно. Это полезно для ускорения, когда задачи не зависят друг от друга.
 
 ### CLI: `orchestration_agent` vs `selection_agent`
 
-In the CAI REPL, **`CAI_AGENT_TYPE`** defaults to **`orchestration_agent`**: a single entry agent that can stay in control while spawning **specialist workers** via tools (`run_specialist`, `run_dual_approach_contest`, `run_parallel_specialists`). Worker subprocesses each get their own `Runner` turn budget from **`CAI_ORCHESTRATION_WORKER_MAX_TURNS`** (1–32, default 6). Optionally, **`CAI_ORCHESTRATION_MAS_HINT`** (default `true`) adds at most one synthetic English user-line per top-level run when the user message looks multi-front but delegation stayed on a single specialist—so the model can consider parallel scouts or a contest.
+В CAI REPL **`CAI_AGENT_TYPE`** по умолчанию — **`orchestration_agent`**: один входной агент, который остаётся в управлении, пока через инструменты (`run_specialist`, `run_dual_approach_contest`, `run_parallel_specialists`) создаются **специализированные worker’ы**. Каждый worker получает свой бюджет ходов `Runner` из **`CAI_ORCHESTRATION_WORKER_MAX_TURNS`** (1–32, по умолчанию 6). Опционально, **`CAI_ORCHESTRATION_MAS_HINT`** (по умолчанию `true`) добавляет максимум одну синтетическую английскую строку пользователя на один верхнеуровневый запуск, если сообщение пользователя выглядит “мультифронтовым”, но делегирование при этом осталось в рамках одного specialist — чтобы модель могла учитывать параллельных scout’ов или конкурс.
 
-**`selection_agent`** is an alternative entry profile: **handoffs only** to other agents, without those orchestration tools. Use **`/agent list`** / **`/agent select`** or **`/help agent`** for the live list and short routing notes; long-form env help: **`/help var CAI_AGENT_TYPE`**, **`/help var CAI_ORCHESTRATION_WORKER_MAX_TURNS`**, **`/help var CAI_ORCHESTRATION_MAS_HINT`**.
+**`selection_agent`** — альтернативный entry-профиль: **handoffs только** в другие агенты, без оркестрационных tools. Используйте **`/agent list`** / **`/agent select`** или **`/help agent`** для “живого” списка и кратких заметок по маршрутизации; для расширенной справки по env используйте: **`/help var CAI_AGENT_TYPE`**, **`/help var CAI_ORCHESTRATION_WORKER_MAX_TURNS`**, **`/help var CAI_ORCHESTRATION_MAS_HINT`**.
 
-This is separate from **`/parallel`** (multiple REPL slots with **`CAI_PARALLEL`**), which runs independent agent instances side by side.
+Это отдельное от **`/parallel`** (несколько слотов REPL с **`CAI_PARALLEL`**), которое запускает независимые экземпляры агентов одновременно.
+

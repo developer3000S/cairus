@@ -1,27 +1,28 @@
-# Agents
+# Агенты
 
-Agents are the core of CAI. An agent uses Large Language Models (LLMs), configured with instructions and tools to perform specialized cybersecurity tasks. Each agent is defined in its own `.py` file in `src/cai/agents` and optimized for specific security domains.
+Агенты — основа CAI. Агент использует большие языковые модели (LLM), настроенные с инструкциями и инструментами для выполнения специализированных задач кибербезопасности. Каждый агент определён в отдельном файле `.py` в `src/cai/agents` и оптимизирован под конкретные домены безопасности.
 
-## Available Agents
+## Доступные агенты
 
-CAI provides a comprehensive suite of specialized agents for different cybersecurity scenarios:
+CAI предоставляет набор специализированных агентов для разных сценариев кибербезопасности:
 
-| Agent | Description | Primary Use Case | Key Tools |
-|-------|-------------|------------------|-----------|
-| **redteam_agent** | Offensive security specialist for penetration testing | Active exploitation, vulnerability discovery | nmap, metasploit, burp |
-| **blueteam_agent** | Defensive security expert for threat mitigation | Security hardening, incident response | wireshark, suricata, osquery |
-| **bug_bounter_agent** | Bug bounty hunter optimized for vulnerability research | Web app security, API testing | ffuf, sqlmap, nuclei |
-| **one_tool_agent** | Minimalist agent focused on single-tool execution | Quick scans, specific tool operations | Generic Linux commands |
-| **dfir_agent** | Digital Forensics and Incident Response expert | Log analysis, forensic investigation | volatility, autopsy, log2timeline |
-| **reverse_engineering_agent** | Binary analysis and reverse engineering | Malware analysis, firmware reversing | ghidra, radare2, ida |
-| **memory_analysis_agent** | Memory dump analysis specialist | RAM forensics, process analysis | volatility, rekall |
-| **network_traffic_analyzer** | Network packet analysis expert | PCAP analysis, traffic inspection | wireshark, tcpdump, tshark |
-| **android_sast_agent** | Android Static Application Security Testing | APK analysis, Android vulnerability scanning | jadx, apktool, mobsf |
-| **wifi_security_tester** | Wireless network security assessment | WiFi penetration testing, WPA cracking | aircrack-ng, reaver, wifite |
-| **replay_attack_agent** | Replay attack execution specialist | Protocol replay, authentication bypass | custom scripts, burp |
-| **subghz_sdr_agent** | Sub-GHz SDR signal analysis expert | RF analysis, IoT protocol testing | hackrf, gqrx, urh |
+| Агент | Описание | Основной сценарий использования | Ключевые инструменты |
+|-------|-----------|----------------------------------|------------------------|
+| **redteam_agent** | Специалист по атакующей безопасности для пентестинга | Активная эксплуатация, поиск уязвимостей | nmap, metasploit, burp |
+| **blueteam_agent** | Эксперт по защитной безопасности для снижения угроз | Укрепление защиты, реагирование на инциденты | wireshark, suricata, osquery |
+| **bug_bounter_agent** | Охотник за багами, оптимизированный под исследование уязвимостей | Безопасность веб-приложений, тестирование API | ffuf, sqlmap, nuclei |
+| **one_tool_agent** | Минималистичный агент, ориентированный на выполнение одной команды/инструмента | Быстрые проверки, операции конкретных инструментов | Команды Generic Linux |
+| **dfir_agent** | Эксперт по цифровой криминалистике и реагированию на инциденты | Анализ логов, форензика | volatility, autopsy, log2timeline |
+| **reverse_engineering_agent** | Анализ бинарников и обратная разработка | Анализ вредоносного ПО, реверс прошивок | ghidra, radare2, ida |
+| **memory_analysis_agent** | Специалист по анализу дампов памяти | Форензика RAM, анализ процессов | volatility, rekall |
+| **network_traffic_analyzer** | Эксперт по анализу сетевых пакетов | Разбор PCAP, инспекция трафика | wireshark, tcpdump, tshark |
+| **android_sast_agent** | Статический анализ безопасности Android (SAST) | Разбор APK, сканирование уязвимостей Android | jadx, apktool, mobsf |
+| **wifi_security_tester** | Оценка безопасности беспроводных сетей | Пентест WiFi, подбор WPA | aircrack-ng, reaver, wifite |
+| **replay_attack_agent** | Специалист по выполнению replay-атак | Replay протоколов, обход аутентификации | пользовательские скрипты, burp |
+| **subghz_sdr_agent** | Эксперт по анализу сигналов SDR в диапазоне Sub‑GHz | Анализ RF, тестирование IoT‑протоколов | hackrf, gqrx, urh |
 
-### Quick Start with Agents
+### Быстрый старт с агентами
+
 
 ```bash
 # Launch CAI with a specific agent
@@ -341,4 +342,4 @@ CAI>/load logs/logname.jsonl
 - **Agent Tools**: See [tools documentation](tools.md) for available tools
 - **Handoffs**: See [handoffs documentation](handoffs.md) for agent coordination
 - **MCP Integration**: See [mcp documentation](mcp.md) for connecting external tools
-- **Multi-Agent Patterns**: See [multi_agent documentation](multi_agent.md) for orchestration patterns
+- **Мультиагентные паттерны**: см. документацию [multi_agent documentation](multi_agent.md) для паттернов оркестрации

@@ -1,357 +1,357 @@
-# Environment Variables Reference
+# Reference переменных окружения
 
-This comprehensive guide documents all environment variables available in CAI, including their purposes, default values, and usage examples.
+Это исчерпывающее руководство описывает все переменные окружения, доступные в CAI: их назначение, значения по умолчанию и примеры использования.
 
 ---
 
-## 🔎 Discovering variables in the REPL
+## 🔎 Поиск переменных в REPL
 
-In current CAI releases, you can explore environment variables **from inside the interactive CLI** without leaving the session:
+В текущих релизах CAI вы можете исследовать переменные окружения прямо **внутри интерактивного CLI**, не выходя из сессии:
 
 
-| What you need                                                                        | Command                                                                                                 |
+| Что нужно                                                                        | Команда                                                                                                 |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| **Numbered list with live values** (what is set *now*)                               | `/env` or `/env list` for extended list of variables                                                    |
-| **Full reference tables** (defaults, allowed values, when they apply, extras)        | `/help` — scroll past the quick guide to the tables (`/help topics` lists commands by category only, no env tables) |
-| **Long-form help for one variable** (examples, `/env list` index when listed, notes) | `/help var VARIABLE_NAME` (e.g. `/help var CAI_MODEL`)                                                  |
+| **Нумерованный список с текущими значениями** (что установлено *сейчас*)     | `/env` или `/env list` для расширенного списка переменных                                                    |
+| **Полные справочные таблицы** (значения по умолчанию, допустимые значения, когда применяются, доп. параметры) | `/help` — пролистайте быстрый гид до таблиц (`/help topics` выводит команды только по категориям, без env-таблиц) |
+| **Развёрнутая помощь по одной переменной** (примеры, индекс `/env list`, примечания) | `/help var VARIABLE_NAME` (например, `/help var CAI_MODEL`)                                                  |
 
 
-Aliases such as `/h` for `/help` work the same way. This page remains the **canonical web reference**; the REPL output tracks the version you have installed.
-
----
-
-## 📋 Complete Reference Table
-
-
-| Variable                   | Description                                                                                                                                                                                                                                                                                                                                                                                      | Default                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| CTF_NAME                   | Name of the CTF challenge to run (e.g. "picoctf_static_flag")                                                                                                                                                                                                                                                                                                                                    | -                                              |
-| CTF_CHALLENGE              | Specific challenge name within the CTF to test                                                                                                                                                                                                                                                                                                                                                   | -                                              |
-| CTF_SUBNET                 | Network subnet for the CTF container                                                                                                                                                                                                                                                                                                                                                             | 192.168.3.0/24                                 |
-| CTF_IP                     | IP address for the CTF container                                                                                                                                                                                                                                                                                                                                                                 | 192.168.3.100                                  |
-| CTF_INSIDE                 | Whether to conquer the CTF from within container                                                                                                                                                                                                                                                                                                                                                 | true                                           |
-| CAI_MODEL                  | Model to use for agents                                                                                                                                                                                                                                                                                                                                                                          | alias1                                         |
-| CAI_DEBUG                  | Set debug output level (0: Only tool outputs, 1: Verbose debug output, 2: CLI debug output)                                                                                                                                                                                                                                                                                                      | 1                                              |
-| CAI_BRIEF                  | Enable/disable brief output mode                                                                                                                                                                                                                                                                                                                                                                 | false                                          |
-| CAI_MAX_TURNS              | Maximum number of turns for agent interactions                                                                                                                                                                                                                                                                                                                                                   | inf                                            |
-| CAI_ORCHESTRATION_WORKER_MAX_TURNS | Max ``Runner`` turns for each specialist worker spawned by ``orchestration_agent`` tools (``run_specialist``, ``run_dual_approach_contest``, ``run_parallel_specialists``). Integer 1–32                                                                                                                                                                                                                                                                                                                                                   | 6                                              |
-| CAI_ORCHESTRATION_MAS_HINT         | When ``true``, ``orchestration_agent`` may receive one synthetic ``user``-role nudge per ``Runner`` run if the user message looks multi-front but only ``run_specialist`` was invoked (suggests ``run_parallel_specialists`` / contest). Set ``false`` to disable                                                                                                                                                                                                                                                                                                                                         | true                                           |
-| CAI_MAX_INTERACTIONS       | Maximum number of interactions (tool calls, agent actions, etc.) allowed in a session. If exceeded, only CLI commands are allowed until increased. If force_until_flag=true, the session will exit                                                                                                                                                                                               | inf                                            |
-| CAI_PRICE_LIMIT            | Price limit for the conversation in dollars. If exceeded, only CLI commands are allowed until increased. If force_until_flag=true, the session will exit                                                                                                                                                                                                                                         | 1                                              |
-| CAI_TRACING                | Enable/disable OpenTelemetry tracing. When enabled, traces execution flow and agent interactions for debugging and analysis                                                                                                                                                                                                                                                                      | true                                           |
-| CAI_AGENT_TYPE             | Registered agent key. Defaults to `orchestration_agent` for default routing plus optional dual-approach contest; use `selection_agent` for the slimmer handoff-only router, or pin a specialist such as `redteam_agent`. Use "/agent" command in CLI to list all available agents                                                                                                                   | orchestration_agent                           |
-| CAI_STATE                  | Enable/disable stateful mode. When enabled, the agent will use a state agent to keep track of the state of the network and the flags found                                                                                                                                                                                                                                                       | false                                          |
-| CAI_COMPACTED_MEMORY       | When true, inject `/compact` conversation summaries into agent system prompts                                                                                                                                                                                                                                                                                                                      | false                                          |
-| CAI_ENV_CONTEXT            | Add environment context, dirs and current env available                                                                                                                                                                                                                                                                                                                                          | true                                           |
-| CAI_SUPPORT_MODEL          | Model to use for the support agent                                                                                                                                                                                                                                                                                                                                                               | o3-mini                                        |
-| CAI_SUPPORT_INTERVAL       | Number of turns between support agent executions                                                                                                                                                                                                                                                                                                                                                 | 5                                              |
-| CAI_STREAM                 | Enable/disable streaming output for LLM inference (token-by-token display). Does NOT affect tool output streaming                                                                                                                                                                                                                                                                                | false                                          |
-| CAI_TOOL_STREAM            | Enable/disable streaming output for tool executions (real-time command output). Independent of CAI_STREAM                                                                                                                                                                                                                                                                                        | true                                           |
-| CAI_DEBUG_TOOLS_VIZ        | Enable debug output for tool visualization and panel rendering. Shows detailed info about tool call display, deduplication, and streaming state                                                                                                                                                                                                                                                  | false                                          |
-| CAI_SHOW_CACHE             | Show cache information and message history list. Displays prompt caching stats and the full message list sent to the model                                                                                                                                                                                                                                                                       | false                                          |
-| CAI_TELEMETRY              | Enable/disable telemetry                                                                                                                                                                                                                                                                                                                                                                         | true                                           |
-| CAI_PARALLEL               | Number of parallel agent instances to run. When set to values greater than 1, executes multiple instances of the same agent in parallel and displays all results                                                                                                                                                                                                                                 | 1                                              |
-| CAI_GUARDRAILS             | Enable/disable security guardrails for agents. When set to "true", applies security guardrails to prevent potentially dangerous outputs and inputs                                                                                                                                                                                                                                               | false                                          |
-| CAI_GCTR_NITERATIONS       | Number of tool interactions before triggering GCTR (Generative Cut-The-Rope) analysis in bug_bounter_gctr agent. Only applies when using gctr-enabled agents                                                                                                                                                                                                                                     | 5                                              |
-| CAI_ACTIVE_CONTAINER       | Docker container ID where commands should be executed. When set, shell commands and tools execute inside the specified container instead of the host. Automatically set when CTF challenges start (if CTF_INSIDE=true) or when attaching a container via `/virtualization` / `/virt` in the REPL                                                                                                                  | -                                              |
-| C99_API_KEY                | API key for C99.nl subdomain discovery service. Required for using the C99 reconnaissance tool for DNS enumeration and subdomain discovery. Obtain from [C99.nl](https://c99.nl)                                                                                                                                                                                                                 | -                                              |
-| CAI_TOOL_TIMEOUT           | Override the default timeout for tool command executions in seconds. When set, this value overrides all default timeouts for shell commands and tool executions                                                                                                                                                                                                                                  | varies (10s for interactive, 100s for regular) |
-| CAI_IDLE_TIMEOUT           | Maximum seconds a command can produce no output before being terminated. Useful for long-running commands like nmap scans that may have gaps between output lines                                                                                                                                                                                                                                | 100                                            |
-| CAI_CTX_TRUNC              | Enable context truncation for large tool outputs. When set to "true", automatically truncates large outputs (>50k chars) to prevent context overflow. JS/HTML/CSS/JSON files get aggressive truncation with preview only. Message history also applies position-based truncation when context exceeds 100k tokens or 60% usage                                                                   | false                                          |
-| CAI_DISPLAY_MAX_OUTPUT     | Show full tool output without truncation. When set to "true", displays complete tool output regardless of length. By default (false), outputs longer than 10,000 characters are truncated showing the first 5,000 and last 5,000 characters with "... TRUNCATED ..." in between. Useful for debugging format string exploits, large command outputs, or when you need to see the complete result | false                                          |
-
+Псевдонимы вроде `/h` для `/help` работают аналогично. Эта страница остаётся **канонической веб-справкой**; вывод REPL отражает версию, которую вы установили.
 
 ---
 
-## 🎯 Quick Reference by Use Case
+## 📋 Полная справочная таблица
 
-### 🚀 Getting Started (Essential)
 
-For first-time users, these are the essential variables to configure:
+| Переменная                  | Описание                                                                                                                                                                                                                                                                                                                                                                                      | Значение по умолчанию                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| CTF_NAME                    | Имя CTF-челленджа для запуска (например, "picoctf_static_flag")                                                                                                                                                                                                                                                                                                                                                                                         | -                                                              |
+| CTF_CHALLENGE               | Конкретное название челленджа внутри CTF для тестирования                                                                                                                                                                                                                                                                                                                                                                                            | -                                                              |
+| CTF_SUBNET                  | Сетевая подсеть для контейнера с CTF                                                                                                                                                                                                                                                                                                                                                                                                                | 192.168.3.0/24                                                 |
+| CTF_IP                      | IP-адрес для контейнера с CTF                                                                                                                                                                                                                                                                                                                                                                                                                | 192.168.3.100                                                 |
+| CTF_INSIDE                  | Нужно ли “захватывать” CTF изнутри контейнера                                                                                                                                                                                                                                                                                                                                                                                                   | true                                                           |
+| CAI_MODEL                   | Модель для агентов                                                                                                                                                                                                                                                                                                                                                                                                                                     | alias1                                                         |
+| CAI_DEBUG                   | Уровень отладочного вывода (0: только вывод инструментов, 1: подробный debug, 2: debug для CLI)                                                                                                                                                                                                                                                                                                                                                        | 1                                                              |
+| CAI_BRIEF                   | Включить/выключить краткий режим вывода                                                                                                                                                                                                                                                                                                                                                                                                              | false                                                          |
+| CAI_MAX_TURNS               | Максимальное число “ходов” для взаимодействий агентов                                                                                                                                                                                                                                                                                                                                                                                                   | inf                                                            |
+| CAI_ORCHESTRATION_WORKER_MAX_TURNS | Максимум ходов ``Runner`` для каждого specialist worker, создаваемого инструментами ``orchestration_agent`` (``run_specialist``, ``run_dual_approach_contest``, ``run_parallel_specialists``). Целое число 1–32                                                                                                                                                                                                                                                       | 6                                                              |
+| CAI_ORCHESTRATION_MAS_HINT  | Когда ``true``, ``orchestration_agent`` может получить один синтетический nudge от пользователя (роль ``user``) в рамках одного запуска ``Runner``, если сообщение пользователя выглядит “мультифронтовым”, но при этом был вызван только ``run_specialist`` (подсказка, что нужно ``run_parallel_specialists`` / contest). Set ``false`` чтобы отключить                                                                                                                                                                                         | true                                                           |
+| CAI_MAX_INTERACTIONS       | Максимум числа взаимодействий (вызовы инструментов, действия агентов и т.п.) разрешённых за сессию. Если лимит превышен, разрешаются только CLI-команды до увеличения лимита. Если ``force_until_flag=true`` — сессия завершится                                                                                                                                                                                                                                                                                                     | inf                                                            |
+| CAI_PRICE_LIMIT            | Лимит стоимости разговора в долларах. Если превышен — разрешаются только CLI-команды до увеличения лимита. Если ``force_until_flag=true`` — сессия завершится                                                                                                                                                                                                                                                                                                                                                                         | 1                                                              |
+| CAI_TRACING                 | Включить/выключить трассировку OpenTelemetry. При включении трассируются исполнение и взаимодействия агентов для отладки и анализа                                                                                                                                                                                                                                                                                                                                                                                       | true                                                           |
+| CAI_AGENT_TYPE             | Ключ зарегистрированного агента. По умолчанию — `orchestration_agent` для маршрутизации плюс опциональный dual-approach contest; используйте `selection_agent` для более “тонкого” роутера только с handoffs, либо закрепляйте specialist (например, `redteam_agent`). Команда `/agent` в CLI выводит все доступные агенты                                                                                                                                                                                                                                                                     | orchestration_agent                           |
+| CAI_STATE                   | Включить/выключить stateful-режим. При включении агент использует state-agent для отслеживания состояния сети и найденных флагов                                                                                                                                                                                                                                                                                                                                                                          | false                                                          |
+| CAI_COMPACTED_MEMORY       | Когда true, добавляет в system prompt агентам краткие сводки из `/compact`                                                                                                                                                                                                                                                                                                                                                                                  | false                                                          |
+| CAI_ENV_CONTEXT            | Добавляет контекст окружения, директории и текущие переменные окружения в контекст LLM                                                                                                                                                                                                                                                                                                                                                                            | true                                                           |
+| CAI_SUPPORT_MODEL          | Модель для агента поддержки                                                                                                                                                                                                                                                                                                                                                                                                                          | o3-mini                                                         |
+| CAI_SUPPORT_INTERVAL       | Число ходов между запусками агента поддержки                                                                                                                                                                                                                                                                                                                                                                                                           | 5                                                              |
+| CAI_STREAM                 | Включить/выключить стриминг вывода для LLM-инференса (покомпонентно, token-by-token). **Не влияет** на стриминг вывода инструментов                                                                                                                                                                                                                                                                                                                                                                   | false                                                          |
+| CAI_TOOL_STREAM            | Включить/выключить стриминг вывода инструментов (реальное время выполнения команд). Независимо от `CAI_STREAM`                                                                                                                                                                                                                                                                                                                                                                                                        | true                                                           |
+| CAI_DEBUG_TOOLS_VIZ        | Включить отладочный вывод для визуализации инструментов и отображения панелей. Показывает подробную информацию о визуализации вызовов инструментов, дедупликации и состоянии стриминга                                                                                                                                                                                                                                                                                                                                                                      | false                                                          |
+| CAI_SHOW_CACHE             | Показать информацию о кэше и список истории сообщений. Показывает статистику prompt caching и полный список сообщений, отправленных в модель                                                                                                                                                                                                                                                                                                                                                                  | false                                                          |
+| CAI_TELEMETRY              | Включить/выключить телеметрию                                                                                                                                                                                                                                                                                                                                                                                                                     | true                                                           |
+| CAI_PARALLEL               | Число параллельных экземпляров агента. При значении > 1 запускает несколько экземпляров того же агента параллельно и показывает все результаты                                                                                                                                                                                                                                                                                                                                                               | 1                                                              |
+| CAI_GUARDRAILS             | Включить/выключить security guardrails для агентов. Когда установлено в "true", применяется защита для предотвращения потенциально опасных выходов и входов                                                                                                                                                                                                                                                                                                                                                                               | false                                                          |
+| CAI_GCTR_NITERATIONS       | Число взаимодействий с инструментами до запуска анализа GCTR (Generative Cut-The-Rope) в агенте ``bug_bounter_gctr``. Применяется только при использовании gctr-enabled агентов                                                                                                                                                                                                                                                                                                                                                                   | 5                                                              |
+| CAI_ACTIVE_CONTAINER       | ID Docker-контейнера, внутри которого следует выполнять команды. Если задано — shell-команды и инструменты выполняются в указанном контейнере вместо хоста. Автоматически выставляется при старте CTF-челленджей (если ``CTF_INSIDE=true``) или при подключении к контейнеру через `/virtualization` / `/virt` в REPL                                                                                                                                                                                                                                                                                                     | -                                                              |
+| C99_API_KEY                | API-ключ для сервиса discovery C99.nl subdomain. Требуется для использования C99 reconnaissance tool для DNS enumeration и subdomain discovery. Получите на [C99.nl](https://c99.nl)                                                                                                                                                                                                                                                                                                                  | -                                                              |
+| CAI_TOOL_TIMEOUT           | Переопределить таймаут по умолчанию для выполнения команд инструментов в секундах. Если задано — это значение переопределяет все стандартные таймауты для shell-команд и инструментов                                                                                                                                                                                                                                                                                                                                                | varies (10s для интерактивного, 100s для обычного)         |
+| CAI_IDLE_TIMEOUT           | Максимум секунд, в течение которых команда может не выводить ничего, прежде чем будет завершена. Полезно для долгих команд типа nmap-сканов с паузами между выводом                                                                                                                                                                                                                                                                                                                                                                                           | 100                                            |
+| CAI_CTX_TRUNC              | Включить усечение контекста для больших выводов инструментов. Когда установлено в "true", большие выводы (>50k символов) автоматически обрезаются, чтобы избежать переполнения контекста. JS/HTML/CSS/JSON файлы получают агрессивное усечение с превью только. История сообщений также применяет position-based truncation, когда контекст превышает 100k tokens или 60% лимита                                                                                                                                                                                                                      | false                                                          |
+| CAI_DISPLAY_MAX_OUTPUT     | Показывать полный вывод инструментов без усечения. При ``true`` отображает весь вывод независимо от длины. По умолчанию (``false``) выводы длиннее 10,000 символов усечены: показываются первые 5,000 и последние 5,000 символов с "... TRUNCATED ..." между ними. Полезно для отладки exploit’ов формат-строк, больших выводов команд и когда нужно видеть полный результат                                                                                                                                                                                                                                          | false                                                          |
+
+---
+
+## 🎯 Быстрая справка по сценариям использования
+
+### 🚀 Старт для новичков (самое важное)
+
+Для первых пользователей — это переменные, которые нужно настроить в первую очередь:
 
 ```bash
-# Required: Model selection
-CAI_MODEL="alias1"                    # or gpt-4o, claude-sonnet-4.5, ollama/qwen2.5:72b
+# Required: выбор модели
+CAI_MODEL="alias1"                    # или gpt-4o, claude-sonnet-4.5, ollama/qwen2.5:72b
 
-# Recommended: Agent type (default CLI entry is orchestration_agent)
-CAI_AGENT_TYPE="orchestration_agent" # breadth-first + specialist tools; selection_agent = handoffs only
-# CAI_ORCHESTRATION_WORKER_MAX_TURNS=6   # per-worker turn cap when using orchestration_agent tools
-# CAI_ORCHESTRATION_MAS_HINT=true        # optional multi-front nudge for orchestration_agent
-# CAI_AGENT_TYPE="redteam_agent"        # pin a specialist when you know the toolkit
+# Recommended: тип агента (по умолчанию CLI entry — orchestration_agent)
+CAI_AGENT_TYPE="orchestration_agent" # breadth-first + specialist инструменты; selection_agent = только handoffs
+# CAI_ORCHESTRATION_WORKER_MAX_TURNS=6   # лимит ходов для каждого специалиста при orchestration_agent
+# CAI_ORCHESTRATION_MAS_HINT=true        # опциональная подсказка для orchestration_agent
+# CAI_AGENT_TYPE="redteam_agent"        # закрепить specialist, если вы точно знаете набор инструментов
 
-# Optional but useful: Cost control
-CAI_PRICE_LIMIT="1"                   # Maximum spend in dollars
+# Optional but useful: контроль стоимости
+CAI_PRICE_LIMIT="1"                   # Максимальные затраты в долларах
 ```
 
-**Related Documentation:**
+**Связанная документация:**
 
-- [Installation Guide](cai/getting-started/installation.md)
-- [Configuration Guide](cai/getting-started/configuration.md)
+- [Руководство по установке](cai/getting-started/installation.md)
+- [Руководство по конфигурации](cai/getting-started/configuration.md)
 
 ---
 
-### 🏴 CTF Challenges
+### 🏴 CTF-челленджи
 
-For running Capture The Flag challenges in containerized environments:
+Для запуска Capture The Flag в контейнеризованных средах:
 
 ```bash
-# Challenge selection
-CTF_NAME="picoctf_static_flag"        # Name of the CTF challenge
-CTF_CHALLENGE="web_exploitation_1"    # Specific sub-challenge
+# Выбор челленджа
+CTF_NAME="picoctf_static_flag"        # Имя CTF челленджа
+CTF_CHALLENGE="web_exploitation_1"    # Конкретный под-челлендж
 
-# Network configuration
-CTF_SUBNET="192.168.3.0/24"          # Container subnet
-CTF_IP="192.168.3.100"               # Container IP address
+# Сетевая конфигурация
+CTF_SUBNET="192.168.3.0/24"          # Подсеть контейнера
+CTF_IP="192.168.3.100"               # IP контейнера
 
-# Execution mode
-CTF_INSIDE="true"                     # Run agent inside container
+# Режим выполнения
+CTF_INSIDE="true"                     # Запуск агента внутри контейнера
 ```
 
-**Best Practices:**
+**Рекомендации (best practices):**
 
-- Set `CTF_INSIDE=true` to run the agent inside the challenge container
-- Use `CAI_ACTIVE_CONTAINER` to manually specify which container to execute commands in
-- Combine with `CAI_STATE=true` to track discovered flags
+- Установите `CTF_INSIDE=true`, чтобы запускать агента внутри контейнера челленджа
+- Используйте `CAI_ACTIVE_CONTAINER`, чтобы вручную указать контейнер для выполнения команд
+- Совмещайте с `CAI_STATE=true`, чтобы отслеживать найденные флаги
 
-**Related Documentation:**
+**Связанная документация:**
 
 - [CTF Benchmarks](benchmarking/jeopardy_ctfs.md)
 
 ---
 
-### 🔍 Reconnaissance & OSINT
+### 🔍 Разведка (Recon) и OSINT
 
-For reconnaissance tasks using external tools:
+Для задач разведки с использованием внешних инструментов:
 
 ```bash
-# C99.nl subdomain discovery
-C99_API_KEY="your-c99-api-key"        # Enable C99 reconnaissance tool
+# C99.nl: discovery поддоменов
+C99_API_KEY="your-c99-api-key"        # Включить инструмент разведки C99
 
-# Agent configuration for recon
-CAI_AGENT_TYPE="redteam_agent"        # Or create custom recon agent
+# Конфигурация агента для recon
+CAI_AGENT_TYPE="redteam_agent"        # Или создать собственный recon-агент
 ```
 
-**Reconnaissance Tools:**
+**Инструменты разведки:**
 
-- **C99 Tool**: Subdomain discovery and DNS enumeration via C99.nl API
-- Configure `C99_API_KEY` to enable the C99 reconnaissance tool
-- See [Tools Documentation](tools.md) for usage examples
+- **C99 Tool**: поиск поддоменов и DNS enumeration через API C99.nl
+- Настройте `C99_API_KEY`, чтобы включить tool разведки C99
+- См. [Документацию по инструментам](tools.md) для примеров использования
 
-**Related Documentation:**
+**Связанная документация:**
 
 - [Tools Documentation](tools.md#c99-tool)
 
 ---
 
-### 🧠 Compacted memory and state
+### 🧠 Уплотнённая память и state
 
-For carrying forward summarized context after `/compact`:
+Для переноса кратко-обобщённого контекста после `/compact`:
 
 ```bash
-# State tracking
-CAI_STATE="true"                      # Enable network state tracking
+# Отслеживание состояния
+CAI_STATE="true"                      # Включить tracking состояния сети
 
-# Inject /compact summaries into new agent prompts
+# Внедрять сводки /compact в system prompt новых агентов
 CAI_COMPACTED_MEMORY="true"
 ```
 
-`CAI_MEMORY` and related Qdrant-style variables are deprecated and ignored by core CAI; use `CAI_COMPACTED_MEMORY` only.
+`CAI_MEMORY` и связанные переменные в стиле Qdrant устарели и игнорируются ядром CAI; используйте `CAI_COMPACTED_MEMORY`.
 
-**Related documentation:**
+**Связанная документация:**
 
 - [Advanced Features](tui/advanced_features.md)
 
 ---
 
-### 🛡️ Security & Safety
+### 🛡️ Безопасность и контроль рисков
 
-For enabling security guardrails and controlling agent behavior:
+Для включения security guardrails и контроля поведения агентов:
 
 ```bash
 # Security guardrails
-CAI_GUARDRAILS="true"                 # Prevent dangerous commands
-CAI_PRICE_LIMIT="1"                   # Maximum cost in dollars
-CAI_MAX_INTERACTIONS="inf"            # Maximum allowed interactions
+CAI_GUARDRAILS="true"                 # Предотвратить опасные команды
+CAI_PRICE_LIMIT="1"                   # Лимит стоимости в долларах
+CAI_MAX_INTERACTIONS="inf"            # Максимум разрешённых взаимодействий
 
-# Debugging & monitoring
-CAI_DEBUG="1"                         # 0: minimal, 1: verbose, 2: CLI debug
-CAI_TRACING="true"                    # Enable OpenTelemetry tracing
+# Отладка и мониторинг
+CAI_DEBUG="1"                         # 0: минимально, 1: подробный, 2: debug CLI
+CAI_TRACING="true"                    # Включить трассировку OpenTelemetry
 ```
 
-**Security Layers:**
+**Слои защиты:**
 
-- **Guardrails**: Prompt injection detection and command validation
-- **Cost Limits**: Prevent runaway API usage
-- **Interaction Limits**: Control agent autonomy
+- **Guardrails**: детект prompt injection и валидация команд
+- **Лимиты стоимости**: предотвращают бесконтрольный расход API
+- **Лимиты взаимодействий**: ограничивают степень автономности агентов
 
-**Related Documentation:**
+**Связанная документация:**
 
-- [Guardrails Documentation](guardrails.md)
+- [Документация по Guardrails](guardrails.md)
 - [TUI Advanced Features](tui/advanced_features.md)
 
 ---
 
-### ⚡ Performance Optimization
+### ⚡ Оптимизация производительности
 
-For optimizing output, execution speed, and resource usage:
+Для оптимизации вывода, скорости выполнения и расхода ресурсов:
 
 ```bash
-# Output control
-CAI_BRIEF="true"                      # Concise output mode
-CAI_STREAM="false"                    # Disable LLM inference streaming (default: false)
-CAI_TOOL_STREAM="true"                # Enable tool output streaming (default: true)
+# Управление выводом
+CAI_BRIEF="true"                      # Краткий режим вывода
+CAI_STREAM="false"                    # Отключить стриминг inference для LLM (по умолчанию: false)
+CAI_TOOL_STREAM="true"                # Включить стриминг вывода инструментов (по умолчанию: true)
 
-# Context optimization
-CAI_ENV_CONTEXT="true"                # Include environment in context
-CAI_MAX_TURNS="50"                    # Limit conversation turns
-CAI_CTX_TRUNC="true"                  # Truncate large outputs to save context
-CAI_DISPLAY_MAX_OUTPUT="false"        # Show full output (set true to disable truncation)
+# Оптимизация контекста
+CAI_ENV_CONTEXT="true"                # Добавлять окружение в контекст
+CAI_MAX_TURNS="50"                    # Ограничить число ходов разговора
+CAI_CTX_TRUNC="true"                  # Усекать большие выводы, чтобы экономить контекст
+CAI_DISPLAY_MAX_OUTPUT="false"        # Показывать полный вывод (установите true, чтобы отключить усечение)
 
-# Tool execution timeout
-CAI_TOOL_TIMEOUT="60"                 # Override default command timeouts (in seconds)
-CAI_IDLE_TIMEOUT="100"                # Max seconds without output before terminating (default: 100)
+# Таймаут выполнения команд
+CAI_TOOL_TIMEOUT="60"                 # Переопределить таймаут команд (в секундах)
+CAI_IDLE_TIMEOUT="100"                # Максимум секунд без вывода до остановки (по умолчанию: 100)
 
-# Telemetry
-CAI_TELEMETRY="true"                  # Enable usage analytics
+# Телеметрия
+CAI_TELEMETRY="true"                  # Включить аналитическую телеметрию
 ```
 
-**Streaming Configuration:**
+**Настройки стриминга:**
 
-- `CAI_STREAM`: Controls LLM inference streaming (token-by-token display). Default: `false`
-- `CAI_TOOL_STREAM`: Controls tool output streaming (real-time command output). Default: `true`
-- These are **independent** - you can have tool streaming enabled while LLM streaming is disabled
+- `CAI_STREAM`: управляет стримингом inference для LLM (token-by-token). По умолчанию: `false`
+- `CAI_TOOL_STREAM`: управляет стримингом вывода инструментов (в реальном времени). По умолчанию: `true`
 
-**Performance Tips:**
+Они **независимы**: можно включить стриминг инструментов при выключенном стриминге LLM.
 
-- Enable `CAI_BRIEF` for concise outputs in automated workflows
-- Set `CAI_MAX_TURNS` to prevent infinite loops
-- Use `CAI_STREAM=false` (default) for faster LLM responses without token-by-token display
-- Use `CAI_TOOL_STREAM=true` (default) to see command output in real-time
-- Set `CAI_TOOL_TIMEOUT` to control command execution timeouts (default: 10s for interactive, 100s for regular commands)
-- Set `CAI_IDLE_TIMEOUT` to control how long a command can run without producing output before being terminated (default: 100s). Increase for slow network scans like nmap
-- Enable `CAI_CTX_TRUNC=true` when working with large files (JS/HTML/CSS) to prevent context overflow
-- Set `CAI_DISPLAY_MAX_OUTPUT=true` to see full tool output without truncation (useful for debugging format strings, large outputs)
+**Советы по производительности:**
+
+- Включайте `CAI_BRIEF` для кратких результатов в автоматизированных сценариях
+- Используйте `CAI_MAX_TURNS`, чтобы предотвратить бесконечные циклы
+- Установите `CAI_STREAM=false` (по умолчанию) для более быстрых ответов LLM без token-by-token вывода
+- Установите `CAI_TOOL_STREAM=true` (по умолчанию), чтобы видеть вывод команд в реальном времени
+- Установите `CAI_TOOL_TIMEOUT`, чтобы ограничить время выполнения команд (по умолчанию: 10s интерактивные, 100s регулярные)
+- Установите `CAI_IDLE_TIMEOUT`, чтобы управлять тем, как долго команда может выполняться без вывода (по умолчанию: 100s). Увеличьте для медленных сетевых сканов вроде nmap
+- Установите `CAI_CTX_TRUNC=true` при работе с большими файлами (JS/HTML/CSS), чтобы предотвратить переполнение контекста
+- Установите `CAI_DISPLAY_MAX_OUTPUT=true`, чтобы видеть полный вывод инструментов без усечения (полезно при отладке строковых формат-уязвимостей и больших результатов)
 
 ---
 
-### 🔧 Advanced Agent Configuration
+### 🔧 Продвинутая конфигурация агентов
 
-For specialized agents and complex workflows:
+Для специализированных агентов и сложных сценариев:
 
 ```bash
-# Support agent (meta-reasoning)
-CAI_SUPPORT_MODEL="o3-mini"          # Model for support agent
-CAI_SUPPORT_INTERVAL="5"             # Turns between support executions
+# Поддерживающий агент (meta-reasoning)
+CAI_SUPPORT_MODEL="o3-mini"          # Модель для агента поддержки
+CAI_SUPPORT_INTERVAL="5"             # Интервал (в ходах) между запусками поддержки
 
-# Parallel execution
-CAI_PARALLEL="3"                      # Run 3 agent instances simultaneously
+# Параллельное выполнение
+CAI_PARALLEL="3"                      # Запуск 3 экземпляров агента параллельно
 
-# Specialized agents
-CAI_GCTR_NITERATIONS="5"             # For bug_bounty_gctr agent
+# Специализированные агенты
+CAI_GCTR_NITERATIONS="5"             # Для bug_bounty_gctr агента
 ```
 
-**Specialized Agent Variables:**
+**Переменные для специализированных агентов:**
 
-- `CAI_GCTR_NITERATIONS`: Controls Cut-The-Rope analysis frequency in GCTR agents
-- `CAI_SUPPORT_MODEL`: Meta-agent for strategic planning
-- `CAI_PARALLEL`: Swarm-style parallel agent execution
+- `CAI_GCTR_NITERATIONS`: как часто запускать Cut-The-Rope анализ в GCTR-агентах
+- `CAI_SUPPORT_MODEL`: meta-agent для стратегического планирования
+- `CAI_PARALLEL`: запуск в стиле swarm-параллельности
 
-**Related Documentation:**
+**Связанная документация:**
 
-- [Agents Documentation](agents.md)
+- [Документация по агентам](agents.md)
 - [Teams & Parallel Execution](tui/teams_and_parallel_execution.md)
 
 ---
 
-### 🐳 Container & Virtualization
+### 🐳 Контейнеры и виртуализация
 
-For executing commands inside Docker containers:
+Для выполнения команд внутри Docker-контейнеров:
 
 ```bash
-# Container targeting
+# Целевой контейнер
 CAI_ACTIVE_CONTAINER="a1b2c3d4e5f6"  # Docker container ID
 
-# Automatic with CTF
-CTF_INSIDE="true"                     # Auto-set CAI_ACTIVE_CONTAINER on CTF start
+# Автоматически с CTF
+CTF_INSIDE="true"                     # Auto-set CAI_ACTIVE_CONTAINER при старте CTF
 ```
 
-**Container Execution:**
+**Выполнение команд:**
 
-- When `CAI_ACTIVE_CONTAINER` is set, all shell commands execute inside that container
-- Automatically configured when starting CTF challenges with `CTF_INSIDE=true`
-- Switch containers using `/virtualization` or `/virt` in the REPL
+- Когда `CAI_ACTIVE_CONTAINER` задан — все shell-команды выполняются внутри указанного контейнера
+- Автоматически настраивается при старте CTF-челленджей при `CTF_INSIDE=true`
+- Переключайте контейнеры с помощью `/virtualization` или `/virt` в REPL
 
-**Related Documentation:**
+**Связанная документация:**
 
 - [Commands Reference](cai/getting-started/commands.md)
 
 ---
 
-### 🖥️ TUI-Specific Configuration
+### 🖥️ Конфигурация, специфичная для TUI
 
-For Terminal User Interface features and workflows:
+Для терминального пользовательского интерфейса и сценариев работы:
 
 ```bash
-# TUI display
-CAI_STREAM="true"                     # Enable LLM inference streaming in TUI panels
-CAI_TOOL_STREAM="true"                # Enable tool output streaming (default)
-CAI_BRIEF="false"                     # Full output for interactive sessions
+# Отображение TUI
+CAI_STREAM="true"                     # Включить стриминг inference LLM в панелях TUI
+CAI_TOOL_STREAM="true"                # Включить стриминг вывода инструментов (по умолчанию)
+CAI_BRIEF="false"                     # Полный вывод для интерактивных сессий
 
 # TUI workflows
-CAI_PARALLEL="1"                      # Usually 1 for TUI, use Teams feature instead
-CAI_GUARDRAILS="false"                # Consider enabling for team workflows
+CAI_PARALLEL="1"                      # Обычно 1 для TUI; используйте feature Teams вместо этого
+CAI_GUARDRAILS="false"                # Рассмотрите включение для командных сценариев
 ```
 
-**TUI Recommendations:**
+**Рекомендации для TUI:**
 
-- Set `CAI_STREAM=true` for better interactive LLM response experience
-- Keep `CAI_TOOL_STREAM=true` (default) to see command output in real-time
-- Use built-in Teams feature instead of `CAI_PARALLEL`
-- Enable `CAI_GUARDRAILS` when coordinating multiple agents
+- Установите `CAI_STREAM=true`, чтобы улучшить интерактивный опыт
+- Оставьте `CAI_TOOL_STREAM=true` (по умолчанию), чтобы видеть вывод команд в реальном времени
+- Используйте встроенный Teams-feature вместо `CAI_PARALLEL`
+- Включайте `CAI_GUARDRAILS`, когда координируете несколько агентов
 
-**Related Documentation:**
+**Связанная документация:**
 
-- [TUI Documentation](tui/tui_index.md)
+- [Документация по TUI](tui/tui_index.md)
 - [TUI Getting Started](tui/getting_started.md)
 
 ---
 
-### 🐛 Debugging & Development
+### 🐛 Отладка и разработка
 
-For debugging CAI internals and development:
+Для отладки внутренних компонентов CAI и разработки:
 
 ```bash
-# Debug levels
-CAI_DEBUG="1"                         # 0: minimal, 1: verbose, 2: CLI debug
+# Debug уровни
+CAI_DEBUG="1"                         # 0: минимально, 1: подробный, 2: debug CLI
 
-# Tool visualization debugging
-CAI_DEBUG_TOOLS_VIZ="true"            # Debug tool panel rendering and deduplication
+# Debug визуализации инструментов
+CAI_DEBUG_TOOLS_VIZ="true"            # Отладка отрисовки панелей инструментов и дедупликации
 
-# Cache and message debugging
-CAI_SHOW_CACHE="true"                 # Show cache stats and full message history list
+# Debug кэша и сообщений
+CAI_SHOW_CACHE="true"                 # Показать статистику кэша и полный список истории сообщений
 
-# Pricing debugging
-CAI_DEBUG_PRICING="1"                 # Log pricing calculations to debug_pricing.txt
+# Debug ценообразования
+CAI_DEBUG_PRICING="1"                 # Логировать расчёты стоимости в debug_pricing.txt
 ```
 
-**Debug Variables Explained:**
+**Объяснение debug-переменных:**
 
-- `CAI_DEBUG`: General debug output level (0-2)
-- `CAI_DEBUG_TOOLS_VIZ`: Shows detailed info about tool call display, panel rendering, streaming state, and deduplication logic
-- `CAI_SHOW_CACHE`: Displays prompt caching statistics and the complete message list sent to the model. Useful for debugging context issues
-- `CAI_DEBUG_PRICING`: Writes detailed pricing calculations to `debug_pricing.txt` for cost analysis
+- `CAI_DEBUG`: общий уровень debug вывода (0-2)
+- `CAI_DEBUG_TOOLS_VIZ`: подробная информация о отображении tool call, панели, стриминговом состоянии и дедупликации
+- `CAI_SHOW_CACHE`: показывает статистику caching и полный список сообщений, отправленных в модель
+- `CAI_DEBUG_PRICING`: пишет детальные расчёты стоимости в `debug_pricing.txt`
 
-**When to Use:**
+**Когда использовать:**
 
-- Use `CAI_DEBUG_TOOLS_VIZ=true` when tool outputs are not displaying correctly or duplicating
-- Use `CAI_SHOW_CACHE=true` when debugging context window issues or cache behavior
-- Use `CAI_DEBUG_PRICING=1` when investigating cost discrepancies
+- Используйте `CAI_DEBUG_TOOLS_VIZ=true`, когда вывод инструментов не отображается корректно или дублируется
+- Используйте `CAI_SHOW_CACHE=true`, когда отлаживаете проблемы с окном контекста или поведением кэша
+- Используйте `CAI_DEBUG_PRICING=1` для разбирательства расхождений в цене
 
 ---
 
-## 💡 Common Configuration Examples
+## 💡 Примеры типовой конфигурации
 
-### Example 1: Local Development with Ollama
+### Пример 1: Локальная разработка с Ollama
 
 ```bash
 CAI_MODEL="ollama/qwen2.5:72b"
@@ -361,7 +361,7 @@ CAI_DEBUG="1"
 CAI_GUARDRAILS="false"
 ```
 
-### Example 2: Production CTF Solving
+### Пример 2: Решение Production CTF
 
 ```bash
 CTF_NAME="hackthebox_challenge"
@@ -373,7 +373,7 @@ CAI_GUARDRAILS="true"
 CAI_PRICE_LIMIT="5"
 ```
 
-### Example 3: Pentesting with Cost Control
+### Пример 3: Pentest с контролем стоимости
 
 ```bash
 CAI_MODEL="gpt-4o"
@@ -384,63 +384,64 @@ CAI_GUARDRAILS="true"
 CAI_BRIEF="false"
 ```
 
-### Example 4: Parallel Testing (Non-TUI)
+### Пример 4: Параллельные тесты (не TUI)
 
 ```bash
 CAI_MODEL="alias0-fast"
 CAI_PARALLEL="5"
 CAI_BRIEF="true"
 CAI_MAX_TURNS="20"
-CAI_STREAM="false"                    # LLM inference streaming off
-CAI_TOOL_STREAM="false"               # Tool streaming off for parallel (auto-disabled)
+CAI_STREAM="false"                    # стриминг inference LLM выключен
+CAI_TOOL_STREAM="false"               # стриминг инструментов выключен для параллели (автоматически)
 ```
 
 ---
 
-## 📚 Related Documentation
+## 📚 Связанная документация
 
-- [Configuration Guide](cai/getting-started/configuration.md) - Basic setup and API keys
-- [Commands Reference](cai/getting-started/commands.md) - Available CLI commands
-- [TUI Documentation](tui/tui_index.md) - Terminal User Interface features
-- [Agents Documentation](agents.md) - Available agent types
-- [Guardrails](guardrails.md) - Security and safety features
+- [Руководство по конфигурации](cai/getting-started/configuration.md) — базовая настройка и API-ключи
+- [Команды CLI](cai/getting-started/commands.md) — список доступных команд
+- [Документация по TUI](tui/tui_index.md) — возможности терминального пользовательского интерфейса
+- [Документация по агентам](agents.md) — типы доступных агентов
+- [Guardrails](guardrails.md) — безопасность и safety-функции
 
 ---
 
-## ⚠️ Important Notes
+## ⚠️ Важные замечания
 
-### API Keys
+### API-ключи
 
-CAI does NOT provide API keys for any model by default. Configure your own keys in the `.env` file:
+CAI **не предоставляет API-ключи** ни для одной модели по умолчанию. Настраивайте свои ключи в файле `.env`:
 
 ```bash
-OPENAI_API_KEY="sk-..."              # Required (can use "sk-123" as placeholder)
-ANTHROPIC_API_KEY="sk-ant-..."       # For Claude models
-ALIAS_API_KEY="sk-..."               # For alias1 (CAI PRO)
-OLLAMA_API_BASE="http://localhost:11434/v1"  # For local models
-C99_API_KEY="your-api-key"           # For C99.nl subdomain discovery tool
+OPENAI_API_KEY="sk-..."              # требуется (можно использовать "sk-123" как заглушку)
+ANTHROPIC_API_KEY="sk-ant-..."       # для Claude-моделей
+ALIAS_API_KEY="sk-..."               # для alias1 (CAI PRO)
+OLLAMA_API_BASE="http://localhost:11434/v1"  # для локальных моделей
+C99_API_KEY="your-api-key"           # для C99.nl subdomain discovery
 ```
 
-See the [Configuration Guide](cai/getting-started/configuration.md) for more details.
+См. [Руководство по конфигурации](cai/getting-started/configuration.md) для более подробной информации.
 
-### Setting Variables
+### Настройка переменных
 
-There are three ways to configure environment variables:
+Есть три способа задать переменные окружения:
 
-**1. `.env` file (Recommended)**
+**1. Файл `.env` (рекомендуется)**
 
 ```bash
-# Add to .env file
+# Добавьте в .env файл
 CAI_MODEL="alias1"
 CAI_PRICE_LIMIT="1"
 ```
 
-**2. Command-line**
+**2. Командная строка**
 
 ```bash
 CAI_MODEL="gpt-4o" CAI_PRICE_LIMIT="2" cai
 ```
 
-**3. Runtime configuration**
+**3. Настройка во время выполнения**
 
-Use slash commands during a session: `/env list`, `/env set …`, and the in-session help above (`/help`, `/help var …`). See [Commands Reference](cai/getting-started/commands.md).
+Используйте slash-команды внутри сессии: `/env list`, `/env set …`, а также встроенную справку выше (`/help`, `/help var …`). См. [Команды CLI](cai/getting-started/commands.md).
+

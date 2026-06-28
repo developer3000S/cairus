@@ -1,18 +1,19 @@
-# CAI PRO - Professional Edition
+# CAI PRO — Профессиональная редакция
 
-> **⚡ Upgrade to CAI PRO**
-> Access advanced features, unlimited `alias1` tokens, and professional support.
-> **[Learn More & Upgrade →](https://aliasrobotics.com/cybersecurityai.php)**
+> **⚡ Обновление до CAI PRO**
+> Доступ к расширенным функциям, неограниченным токенам `alias1` и профессиональной поддержке.
+> **[Подробнее и обновиться →](https://aliasrobotics.com/cybersecurityai.php)**
 
 ---
 
-## Overview
+## Обзор
 
-**CAI PRO** is the professional edition of Cybersecurity AI, designed for security professionals, enterprises, and teams who need unrestricted AI capabilities, advanced features, and dedicated support for their security operations.
+**CAI PRO** — это профессиональная редакция Cybersecurity AI, предназначенная для специалистов по безопасности, организаций и команд, которым нужны неограниченные возможности ИИ, расширенные функции и выделенная поддержка для безопасностных операций.
 
-### Why CAI PRO?
+### Почему CAI PRO?
 
-The cybersecurity AI landscape is rapidly evolving, and professionals need tools that can keep pace with sophisticated threats. CAI PRO delivers:
+Ландшафт кибербезопасностной ИИ-индустрии быстро развивается, и профессионалам нужны инструменты, которые успевают за самыми сложными угрозами. CAI PRO предоставляет:
+
 
 - **🚀 The Best Cybersecurity LLMs**: Unlimited access to the **entire Alias model family** (`alias1` and successors), purpose-built for offensive and defensive security and **outperforming GPT-5** in CTF benchmarks
 - **♾️ Unlimited Alias Tokens**: No per-query metering, no monthly token caps — run long engagements and parallel agents without rationing

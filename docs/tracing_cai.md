@@ -1,3 +1,4 @@
-# ⚠️ Tracing
+# ⚠️ Трассировка
 
-We are in the process of implementing this feature.
+Мы сейчас в процессе внедрения этой функции.
+

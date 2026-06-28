@@ -1,8 +1,9 @@
-# ⚠️ Tracing
+# ⚠️ Трассировка
 
 !!!warning
 
-    The tracing feature is disabled as we're re-implementing it to be in-line with OpenTelemetry standards. The new implementation will be available in the future.
+    Функция трассировки отключена, поскольку мы переписываем её, чтобы она соответствовала стандартам OpenTelemetry. Новая реализация будет доступна в будущем.
+
 
 The Agents SDK includes built-in tracing, collecting a comprehensive record of events during an agent run: LLM generations, tool calls, handoffs, guardrails, and even custom events that occur. Using the [Traces dashboard](https://platform.openai.com/traces), you can debug, visualize, and monitor your workflows during development and in production.
 

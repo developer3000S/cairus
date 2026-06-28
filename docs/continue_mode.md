@@ -1,10 +1,11 @@
-# CAI Continue Mode
+# Режим продолжения CAI
 
-## Overview
+## Обзор
 
-The `--continue` flag enables CAI agents to operate autonomously by automatically generating intelligent continuation prompts when they would normally stop and wait for user input. This feature uses AI-powered analysis to provide contextual advice based on the conversation history, allowing agents to work on complex tasks without manual intervention.
+Флаг `--continue` позволяет агентам CAI работать автономно: система автоматически генерирует умные подсказки для продолжения, когда агент обычно останавливается и ждёт ввод пользователя. Эта функция использует анализ с ИИ, чтобы предоставлять контекстные рекомендации на основе истории диалога — благодаря этому агенты могут выполнять сложные задачи без ручного вмешательства.
 
-## Quick Start
+## Быстрый старт
+
 
 ```bash
 # Tell jokes continuously

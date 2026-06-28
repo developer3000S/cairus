@@ -1,6 +1,7 @@
-# Cybersecurity AI (`CAI`)
+# Кибербезопасностная ИИ-система (`CAI`)
 
-A lightweight, ergonomic framework for building bug bounty-ready Cybersecurity AIs (CAIs).
+Лёгкий, удобный фреймворк для создания ИИ-систем в области кибербезопасности, готовых к Bug Bounty (CAI).
+
 
 <div align="center">
   <p>
@@ -13,51 +14,51 @@ A lightweight, ergonomic framework for building bug bounty-ready Cybersecurity A
   </p>
 </div>
 
-## Key Features
+## Ключевые возможности
 
-- 🤖 **300+ AI Models**: Support for OpenAI, Anthropic, DeepSeek, Ollama, and more
-- 🔧 **Built-in Security Tools**: Ready-to-use tools for reconnaissance, exploitation, and privilege escalation
-- 🏆 **Battle-tested**: Proven in HackTheBox CTFs, bug bounties, and real-world security case studies
-- 🎯 **Agent-based Architecture**: Modular framework design to build specialized agents for different security tasks
-- 🛡️ **Guardrails Protection**: Built-in defenses against prompt injection and dangerous command execution
-- 📚 **Research-oriented**: Research foundation to democratize cybersecurity AI for the community
+- 🤖 **300+ AI-моделей**: поддержка OpenAI, Anthropic, DeepSeek, Ollama и др.
+- 🔧 **Встроенные средства безопасности**: готовые инструменты для разведки, эксплуатации и повышения привилегий
+- 🏆 **Проверено на практике**: подтверждено в HackTheBox CTF, баг-баунти и реальных кейсах по безопасности
+- 🎯 **Архитектура на базе агентов**: модульная конструкция для создания специализированных агентов под разные задачи безопасности
+- 🛡️ **Защита с помощью Guardrails**: встроенная защита от prompt injection и опасного выполнения команд
+- 📚 **Ориентация на исследования**: исследовательская основа для демократизации кибербезопасностного ИИ в сообществе
 
 ---
 
-## 🚀 CAI PRO - Professional Edition
+## 🚀 CAI PRO — профессиональная редакция
 
 <div class="highlight-box" markdown>
 
-### Upgrade to Unrestricted AI for Security Professionals
+### Обновление до неограниченного ИИ для специалистов по безопасности
 
-**CAI PRO** delivers the power you need for professional security testing:
+**CAI PRO** даёт мощность, необходимую для профессионального тестирования безопасности:
 
-- ✅ **Unlimited `alias1` tokens** - Our state-of-the-art cybersecurity model that beats GPT-5 in benchmarks
-- ✅ **Mobile User Interface (iOS)** - Native iOS app for security testing on the go - **[Join TestFlight Beta](https://testflight.apple.com/join/nXZZD4Z5)**
-- ✅ **Terminal User Interface (TUI)** - Multi-agent parallel execution with visual monitoring *(Deprecated - Use Mobile UI)*
-- ✅ **Zero Refusals** - Unrestricted AI specifically trained for offensive security
-- ✅ **European Hosting** - GDPR & NIS2 compliant with guaranteed data privacy
-- ✅ **Professional Support** - Dedicated technical assistance from security experts
+- ✅ **Неограниченное количество `alias1` токенов** — наша передовая модель кибербезопасности, превосходящая GPT-5 в бенчмарках
+- ✅ **Мобильный интерфейс (iOS)** — нативное iOS-приложение для тестирования безопасности «на ходу» — **[Присоединиться к TestFlight Beta](https://testflight.apple.com/join/nXZZD4Z5)**
+- ✅ **Терминальный интерфейс (TUI)** — параллельное выполнение нескольких агентов с визуальным мониторингом *(устарело — используйте Mobile UI)*
+- ✅ **Нулевые отказы (Zero Refusals)** — неограниченный ИИ, специально обученный для offensive security
+- ✅ **Европейский хостинг** — совместимость с GDPR и NIS2 с гарантией приватности данных
+- ✅ **Профессиональная поддержка** — выделенная техническая помощь от специалистов по безопасности
 
-**Pricing**: €350/month · Commercial license included · Cancel anytime
+**Стоимость**: €350/месяц · коммерческая лицензия включена · можно отменить в любое время
 
-**[Learn More & Upgrade to CAI PRO →](cai_pro.md)**
+**[Узнать больше и обновить до CAI PRO →](cai_pro.md)**
 
 </div>
 
 ---
 
-| CAI with `alias0` on ROS message injection attacks in MiR-100 robot | CAI with `alias0` on API vulnerability discovery at Mercado Libre |
+| CAI с `alias0` на атаках внедрения сообщений ROS в роботе MiR-100 | CAI с `alias0` на поиске уязвимостей API в Mercado Libre |
 |-----------------------------------------------|---------------------------------|
 | [![asciicast](https://asciinema.org/a/dNv705hZel2Rzrw0cju9HBGPh.svg)](https://asciinema.org/a/dNv705hZel2Rzrw0cju9HBGPh) | [![asciicast](https://asciinema.org/a/9Hc9z1uFcdNjqP3bY5y7wO1Ww.svg)](https://asciinema.org/a/9Hc9z1uFcdNjqP3bY5y7wO1Ww) |
 
 
-| CAI on JWT@PortSwigger CTF — Cybersecurity AI | CAI on HackableII Boot2Root CTF — Cybersecurity AI |
+| CAI в JWT@PortSwigger CTF — Cybersecurity AI | CAI в HackableII Boot2Root CTF — Cybersecurity AI |
 |-----------------------------------------------|---------------------------------|
 | [![asciicast](https://asciinema.org/a/713487.svg)](https://asciinema.org/a/713487) | [![asciicast](https://asciinema.org/a/713485.svg)](https://asciinema.org/a/713485) |
 
 
-## 🎯 Milestones
+## 🎯 Вехи (Milestones)
 <p>
 <a href="https://app.hackthebox.com/users/2268644"><img src="https://img.shields.io/badge/HTB_ranking-top_90_Spain_(5_days)-red.svg" alt="HTB top 90 Spain (5 days)"></a>
 <a href="https://app.hackthebox.com/users/2268644"><img src="https://img.shields.io/badge/HTB_ranking-top_50_Spain_(6_days)-red.svg" alt="HTB ranking top 50 Spain (6 days)"></a>
@@ -71,7 +72,7 @@ A lightweight, ergonomic framework for building bug bounty-ready Cybersecurity A
 <a href="https://github.com/aliasrobotics/cai"><img src="https://img.shields.io/badge/Bug_rewards-250_$-yellow.svg" alt="Bug rewards 250 $"></a>
 </p>
 
-## 📦 Package Attributes
+## 📦 Атрибуты пакета
 <p>
 <a href="https://badge.fury.io/py/cai-framework"><img src="https://badge.fury.io/py/cai-framework.svg" alt="version"></a>
 <a href="https://pypistats.org/packages/cai-framework"><img src="https://img.shields.io/pypi/dm/cai-framework" alt="downloads"></a>
@@ -85,74 +86,76 @@ A lightweight, ergonomic framework for building bug bounty-ready Cybersecurity A
 
 ---
 
-## 📊 Research-Backed Performance
+## 📊 Производительность, подтверждённая исследованиями
 
-CAI's capabilities are validated through rigorous peer-reviewed research demonstrating state-of-the-art performance:
+Возможности CAI подтверждаются строгими исследованиями с рецензированием, демонстрирующими современный уровень результатов:
 
-!!! tip "Research Highlights"
-    - 🚀 **[3,600× faster](https://arxiv.org/pdf/2504.06017)** than manual security testing in specific scenarios
-    - 🎯 **[54.3% patching success](https://arxiv.org/pdf/2510.17521)** in real-world CTF defense scenarios
-    - 📊 **[Superior benchmark performance](https://arxiv.org/pdf/2510.24317)** via CAIBench meta-framework evaluation
-    - 🛡️ **[Four-layer guardrails](https://arxiv.org/pdf/2508.21669)** against prompt injection attacks
+!!! tip "Основные результаты исследований"
+    - 🚀 **[в 3,600 раз быстрее](https://arxiv.org/pdf/2504.06017)**, чем ручное тестирование безопасности в определённых сценариях
+    - 🎯 **[54,3% успешного патчинга](https://arxiv.org/pdf/2510.17521)** в реальных сценариях защиты в CTF
+    - 📊 **[превосходные результаты в бенчмарках](https://arxiv.org/pdf/2510.24317)** через оценку в meta-фреймворке CAIBench
+    - 🛡️ **[защита в четыре слоя (four-layer guardrails)](https://arxiv.org/pdf/2508.21669)** от prompt injection
 
-### Key Publications
+### Ключевые публикации
 
-- 📊 [**CAIBench**](https://arxiv.org/pdf/2510.24317) - Modular meta-benchmark framework for evaluating cybersecurity AI agents
-- 🎯 [**Agentic Cybersecurity Evaluation**](https://arxiv.org/pdf/2510.17521) - Real-world CTF performance validation
-- 🚀 [**CAI Framework**](https://arxiv.org/pdf/2504.06017) - Core architecture demonstrating 3,600× speedup
-- 🛡️ [**Prompt Injection Defense**](https://arxiv.org/pdf/2508.21669) - Security guardrails for AI agents
-- 📚 [**CAI Fluency**](https://arxiv.org/pdf/2508.13588) - Educational framework for democratizing AI security
-- 🤖 [**Automation vs Autonomy**](https://www.arxiv.org/pdf/2506.23592) - 6-level taxonomy for cybersecurity AI
+- 📊 [**CAIBench**](https://arxiv.org/pdf/2510.24317) — модульный meta-бенчмарк для оценки агентов ИИ в кибербезопасности
+- 🎯 [**Оценка кибербезопасности на базе агентности (Agentic Cybersecurity Evaluation)**](https://arxiv.org/pdf/2510.17521) — проверка эффективности в реальных CTF
+- 🚀 [**Фреймворк CAI**](https://arxiv.org/pdf/2504.06017) — базовая архитектура, демонстрирующая ускорение в 3,600 раз
+- 🛡️ [**Защита от prompt injection**](https://arxiv.org/pdf/2508.21669) — guardrails для агентов ИИ
+- 📚 [**CAI Fluency**](https://arxiv.org/pdf/2508.13588) — образовательный фреймворк для демократизации AI security
+- 🤖 [**Автоматизация vs автономность (Automation vs Autonomy)**](https://www.arxiv.org/pdf/2506.23592) — таксономия из 6 уровней для cybersecurity AI
 
-**📖 Explore all 24+ papers:** [Alias Robotics Research Library →](https://aliasrobotics.com/research-security.php#papers)
+**📖 Ознакомьтесь со всеми 24+ работами:** [библиотека исследований Alias Robotics →](https://aliasrobotics.com/research-security.php#papers)
 
 ---
 
-> ⚠️ CAI is in active development, so don't expect it to work flawlessly. Instead, contribute by raising an issue or [sending a PR](https://github.com/aliasrobotics/cai/pulls).
+> ⚠️ CAI находится в активной разработке, поэтому не стоит ожидать идеальной работы во всех случаях. Вместо этого можно помочь, открыв issue или [отправив PR](https://github.com/aliasrobotics/cai/pulls).
 >
-> Access to this library and the use of information, materials (or portions thereof), is **<u>not intended</u>, and is <u>prohibited</u>, where such access or use violates applicable laws or regulations**. By no means the authors encourage or promote the unauthorized tampering with running systems. This can cause serious human harm and material damages.
+> Доступ к этой библиотеке и использование информации, материалов (или их частей), **не предназначены и запрещены**, если такой доступ или использование нарушает применимые законы или нормативные акты. Авторы никоим образом не поощряют и не продвигают несанкционированное вмешательство в работу запущенных систем. Это может причинить серьёзный вред людям и материальный ущерб.
 >
-> *By no means the authors of CAI encourage or promote the unauthorized tampering with compute systems. Please don't use the source code in here for cybercrime. <u>Pentest for good instead</u>*. By downloading, using, or modifying this source code, you agree to the terms of the [`LICENSE`](LICENSE) and the limitations outlined in the [`DISCLAIMER`](DISCLAIMER) file.
+> *Авторы CAI никоим образом не поощряют и не продвигают несанкционированное вмешательство в вычислительные системы. Пожалуйста, не используйте код здесь для киберпреступлений. <u>Pentest for good instead</u>.* Загружая, используя или изменяя этот исходный код, вы соглашаетесь с условиями [`LICENSE`](LICENSE) и ограничениями, указанными в [`DISCLAIMER`](DISCLAIMER).
 
 
-## Motivation
-### Why CAI?
-The cybersecurity landscape is undergoing a dramatic transformation as AI becomes increasingly integrated into security operations. **We predict that by 2028, AI-powered security testing tools will outnumber human pentesters**. This shift represents a fundamental change in how we approach cybersecurity challenges. *AI is not just another tool - it's becoming essential for addressing complex security vulnerabilities and staying ahead of sophisticated threats. As organizations face more advanced cyber attacks, AI-enhanced security testing will be crucial for maintaining robust defenses.*
+## Мотивация
+### Почему CAI?
 
-This work builds upon prior efforts[1] and similarly, we believe that democratizing access to advanced cybersecurity AI tools is vital for the entire security community. That's why we're releasing Cybersecurity AI (`CAI`) as an open source framework. Our goal is to empower security researchers, ethical hackers, and organizations to build and deploy powerful AI-driven security tools. By making these capabilities openly available, we aim to level the playing field and ensure that cutting-edge security AI technology isn't limited to well-funded private companies or state actors.
+Ландшафт кибербезопасности претерпевает драматические изменения: ИИ всё активнее интегрируется в процессы обеспечения безопасности. **Мы прогнозируем, что к 2028 году инструменты тестирования безопасности, основанные на ИИ, будут превосходить по численности человеческих пентестеров**. Это означает фундаментальный сдвиг в подходе к задачам кибербезопасности. *ИИ — это не просто ещё один инструмент: он становится ключевым для решения сложных уязвимостей и поддержания готовности к более изощрённым угрозам. По мере роста числа более продвинутых кибератак со стороны организаций, усиленное ИИ тестирование безопасности становится критически важным для поддержания устойчивой защиты.*
 
-Bug Bounty programs have become a cornerstone of modern cybersecurity, providing a crucial mechanism for organizations to identify and fix vulnerabilities in their systems before they can be exploited. These programs have proven highly effective at securing both public and private infrastructure, with researchers discovering critical vulnerabilities that might have otherwise gone unnoticed. CAI is specifically designed to enhance these efforts by providing a lightweight, ergonomic framework for building specialized AI agents that can assist in various aspects of Bug Bounty hunting - from initial reconnaissance to vulnerability validation and reporting. Our framework aims to augment human expertise with AI capabilities, helping researchers work more efficiently and thoroughly in their quest to make digital systems more secure.
+Эта работа опирается на предыдущие усилия[1], и мы также считаем, что демократизация доступа к продвинутому кибербезопасностному ИИ важна для всего сообщества. Поэтому мы выпускаем Cybersecurity AI (`CAI`) как open source фреймворк. Наша цель — дать возможность специалистам по безопасности, этичным хакерам и организациям создавать и внедрять мощные инструменты, основанные на ИИ. Делая эти возможности открытыми, мы стремимся выровнять условия и обеспечить, чтобы передовые технологии security AI не были ограничены только хорошо финансируемыми частными компаниями или государственными структурами.
 
-### Ethical principles behind CAI
+Баг-баунти программы стали краеугольным камнем современной кибербезопасности: они дают организациям механизм для выявления и устранения уязвимостей до того, как их смогут эксплуатировать. На практике эти программы показали высокую эффективность в защите и публичной, и частной инфраструктуры: исследователи находят критические уязвимости, которые иначе могли бы остаться незамеченными. CAI специально создан для усиления этих усилий: он предлагает лёгкий, удобный фреймворк для создания специализированных AI-агентов, помогающих в разных аспектах баг-баунти — от начальной разведки до валидации уязвимостей и подготовки отчётности. Фреймворк дополняет человеческую экспертизу возможностями ИИ, помогая исследователям работать эффективнее и глубже в их стремлении сделать цифровые системы более защищёнными.
 
-You might be wondering if releasing CAI *in-the-wild* given its capabilities and security implications is ethical. Our decision to open-source this framework is guided by two core ethical principles:
+### Этические принципы CAI
 
-1. **Democratizing Cybersecurity AI**: We believe that advanced cybersecurity AI tools should be accessible to the entire security community, not just well-funded private companies or state actors. By releasing CAI as an open source framework, we aim to empower security researchers, ethical hackers, and organizations to build and deploy powerful AI-driven security tools, leveling the playing field in cybersecurity.
+Вам может быть интересно, этично ли выпускать CAI *«в реальном мире»* с учётом его возможностей и рисков безопасности. Наше решение открыть исходный код этого фреймворка опирается на два ключевых этических принципа:
 
-2. **Transparency in AI Security Capabilities**: Based on our research results, understanding of the technology, and dissection of top technical reports, we argue that current LLM vendors are undermining their cybersecurity capabilities. This is extremely dangerous and misleading. By developing CAI openly, we provide a transparent benchmark of what AI systems can actually do in cybersecurity contexts, enabling more informed decisions about security postures.
+1. **Демократизация кибербезопасностного ИИ**: мы считаем, что инструменты advanced cybersecurity AI должны быть доступны всему сообществу, а не только хорошо финансируемым частным компаниям или государственным структурам. Выпуская CAI как open source фреймворк, мы даём исследователям безопасности, этичным хакерам и организациям возможность создавать и внедрять мощные инструменты, основанные на ИИ, тем самым выравнивая условия в кибербезопасности.
 
-CAI is built on the following core principles:
+2. **Прозрачность возможностей в области AI security**: основываясь на наших исследовательских результатах, понимании технологии и разборе ключевых технических отчётов, мы утверждаем, что текущие вендоры LLM подрывают свои способности в области кибербезопасности. Это крайне опасно и вводит в заблуждение. Разрабатывая CAI открыто, мы даём прозрачный ориентир того, что AI-системы действительно могут делать в контексте кибербезопасности, позволяя принимать более информированные решения о зрелости защиты.
 
-- **Cybersecurity oriented AI framework**: CAI is specifically designed for cybersecurity use cases, aiming at semi- and fully-automating offensive and defensive security tasks.
-- **Open source, free for research**: CAI is open source and free for research purposes. We aim at democratizing access to AI and Cybersecurity. For professional or commercial use, including on-premise deployments, dedicated technical support and custom extensions [reach out](mailto:research@aliasrobotics.com) to obtain a license.
-- **Lightweight**: CAI is designed to be fast, and easy to use.
-- **Modular and agent-centric design**: CAI operates on the basis of agents and agentic patterns, which allows flexibility and scalability. You can easily add the most suitable agents and pattern for your cybersecurity target case.
-- **Tool-integration**: CAI integrates already built-in tools, and allows the user to integrate their own tools with their own logic easily.
-- **Logging and tracing integrated**: using [`phoenix`](https://github.com/Arize-ai/phoenix), the open source tracing and logging tool for LLMs. This provides the user with a detailed traceability of the agents and their execution.
-- **Multi-Model Support**: more than 300 supported and empowered by [LiteLLM](https://github.com/BerriAI/litellm). The most popular providers:
+CAI опирается на следующие базовые принципы:
 
-### Popular Model Providers
+- **Кибербезопасностно-ориентированный AI фреймворк**: CAI специально предназначен для задач кибербезопасности — для полу- и полностью автоматизированных offensive/defensive сценариев.
+- **Open source и бесплатно для исследований**: CAI открыт и доступен для исследовательских целей. Мы стремимся демократизировать доступ к ИИ и кибербезопасности. Для профессионального или коммерческого использования, включая on-premise внедрения, а также для выделенной технической поддержки и кастомных расширений [обратитесь](mailto:research@aliasrobotics.com), чтобы получить лицензию.
+- **Лёгкость**: CAI проектировался так, чтобы быть быстрым и простым в использовании.
+- **Модульность и агентно-ориентированный дизайн**: CAI работает на базе агентов и agentic паттернов — это даёт гибкость и масштабируемость. Вы легко добавляете наиболее подходящие агенты и паттерны под ваш security target кейс.
+- **Интеграция инструментов**: CAI использует уже встроенные инструменты и позволяет пользователю легко подключать свои инструменты со своей логикой.
+- **Встроенные логирование и трассировка**: через [`phoenix`](https://github.com/Arize-ai/phoenix) — open source tool для трассировок и логирования в LLM. Это обеспечивает подробную прослеживаемость работы агентов и их выполнения.
+- **Поддержка множества моделей (Multi-Model Support)**: более 300 поддерживаемых моделей и расширений, включённых через [LiteLLM](https://github.com/BerriAI/litellm). Самые популярные провайдеры:
+
+### Популярные провайдеры моделей
 * **Anthropic**: `Claude 3.7`, `Claude 3.5`, `Claude 3`, `Claude 3 Opus`
 * **OpenAI**: `O1`, `O1 Mini`, `O3 Mini`, `GPT-4o`, `GPT-4.5 Preview`
 * **DeepSeek**: `DeepSeek V3`, `DeepSeek R1`
-* **Ollama**: `Qwen2.5 72B`, `Qwen2.5 14B`, And many more
+* **Ollama**: `Qwen2.5 72B`, `Qwen2.5 14B`, и многое другое
 
-### Closed-source alternatives
-Cybersecurity AI is a critical field, yet many groups are misguidedly pursuing it through closed-source methods for pure economic return, leveraging similar techniques and building upon existing closed-source (*often third-party owned*) models. This approach not only squanders valuable engineering resources but also represents an economic waste and results in redundant efforts, as they often end up reinventing the wheel. Here are some of the closed-source initiatives we keep track of and attempting to leverage genAI and agentic frameworks in cybersecurity AI:
+### Альтернативы с закрытым исходным кодом
+
+Cybersecurity AI — критически важная область, однако многие команды продвигаются к ней через закрытые подходы ради чистой экономической выгоды. Они используют похожие техники и опираются на существующие закрытые (*часто принадлежащие сторонним компаниям*) модели. Такой подход не только приводит к расходованию ценных инженерных ресурсов, но и представляет собой экономическую неэффективность и ведёт к дублированию усилий — часто команды в итоге «изобретают колесо» заново. Ниже — некоторые из закрытых инициатив, за которыми мы следим, пытаясь использовать genAI и agentic фреймворки в кибербезопасности:
 
 - [Runsybil](https://www.runsybil.com)
 - [Selfhack](https://www.selfhack.fi)
-- [Sxipher](https://www.sxipher.com/) (seems discontinued)
+- [Sxipher](https://www.sxipher.com/) (похоже, проект остановлен)
 - [Staris](https://staris.tech/)
 - [Terra Security](https://www.terra.security)
 - [Xint](https://xint.io/)
@@ -162,15 +165,16 @@ Cybersecurity AI is a critical field, yet many groups are misguidedly pursuing i
 
 ---
 
-[1] Deng, G., Liu, Y., Mayoral-Vilches, V., Liu, P., Li, Y., Xu, Y., ... & Rass, S. (2024). {PentestGPT}: Evaluating and harnessing large language models for automated penetration testing. In 33rd USENIX Security Symposium (USENIX Security 24) (pp. 847-864).
+[1] Deng, G., Liu, Y., Mayoral-Vilches, V., Liu, P., Li, Y., Xu, Y., ... & Rass, S. (2024). {PentestGPT}: Evaluating and harnessing large language models for automated penetration testing. В материалах 33rd USENIX Security Symposium (USENIX Security 24) (стр. 847–864).
 
-## Citation
-If you want to cite our work, please use the following:
+## Цитирование
+
+Если хотите процитировать нашу работу, используйте следующее:
 
 ```bibtex
 @article{mayoral2025cai,
   title={CAI: An Open, Bug Bounty-Ready Cybersecurity AI},
-  author={Mayoral-Vilches, V{\'\i}ctor and Navarrete-Lozano, Luis Javier and Sanz-G{\'o}mez, Mar{\'\i}a and Espejo, Lidia Salas and Crespo-{\'A}lvarez, Marti{\~n}o and Oca-Gonzalez, Francisco and Balassone, Francesco and Glera-Pic{\'o}n, Alfonso and Ayucar-Carbajo, Unai and Ruiz-Alcalde, Jon Ander and Rass, Stefan and Pinzger, Martin and Gil-Uriarte, Endika},
+  author={Mayoral-Vilches, V{\'\i}ctor and Navarrete-Lozano, Luis Javier and Sanz-G{\'o}mez, Mar{\'\i}a and Espejo, Lidia Salas and Crespo-{\'\A}lvarez, Marti{\~n}o and Oca-Gonzalez, Francisco and Balassone, Francesco and Glera-Pic{\'o}n, Alfonso and Ayucar-Carbajo, Unai and Ruiz-Alcalde, Jon Ander and Rass, Stefan and Pinzger, Martin and Gil-Uriarte, Endika},
   journal={arXiv preprint arXiv:2504.06017},
   year={2025}
 }
@@ -219,6 +223,7 @@ If you want to cite our work, please use the following:
 
 ```
 
-## Acknowledgements
+## Благодарности
 
-CAI was initially developed by [Alias Robotics](https://aliasrobotics.com) and co-funded by the European EIC accelerator project RIS (GA 101161136) - HORIZON-EIC-2023-ACCELERATOR-01 call. The original agentic principles are inspired from OpenAI's [`swarm`](https://github.com/openai/swarm) library and translated into newer prototypes. This project also makes use of other relevant open source building blocks including [`LiteLLM`](https://github.com/BerriAI/litellm), and [`phoenix`](https://github.com/Arize-ai/phoenix).
+CAI изначально был разработан [Alias Robotics](https://aliasrobotics.com) и софинансировался европейским акселератором проекта RIS (GA 101161136) — HORIZON-EIC-2023-ACCELERATOR-01. Оригинальные agentic принципы вдохновлены библиотекой OpenAI [`swarm`](https://github.com/openai/swarm) и перенесены в более новые прототипы. В проекте также используются другие релевантные open source компоненты, включая [`LiteLLM`](https://github.com/BerriAI/litellm) и [`phoenix`](https://github.com/Arize-ai/phoenix).
+
