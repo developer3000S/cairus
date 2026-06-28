@@ -1,19 +1,19 @@
-# CAI Global Usage Tracking
+# Глобальное отслеживание использования CAI
 
-CAI now includes automatic global usage tracking that persists token usage and costs across all sessions to `$HOME/.cai/usage.json`.
+CAI теперь включает автоматическое глобальное отслеживание использования, которое сохраняет данные о токенах и стоимости между сессиями в файл `$HOME/.cai/usage.json`.
 
-## Features
+## Возможности
 
-- **Automatic Tracking**: All LLM interactions are automatically tracked
-- **Global Persistence**: Usage data persists across all CAI sessions
-- **Model-Specific Stats**: Track usage per model (GPT-4, Claude, etc.)
-- **Daily Breakdowns**: View usage by day
-- **Session History**: Track individual session costs and tokens
-- **Cost Calculation**: Automatic cost calculation based on model pricing
+- **Автоматическое отслеживание**: все взаимодействия с LLM отслеживаются автоматически
+- **Глобальное хранение**: данные использования сохраняются между всеми сессиями CAI
+- **Статистика по моделям**: отслеживание использования по каждой модели (GPT-4, Claude и др.)
+- **Ежедневная разбивка**: просмотр использования по дням
+- **История сессий**: отслеживание стоимости и токенов по отдельным сессиям
+- **Расчёт стоимости**: автоматический подсчёт стоимости на основании цен моделей
 
-## Usage Data Structure
+## Структура данных использования
 
-The `$HOME/.cai/usage.json` file contains:
+Файл `$HOME/.cai/usage.json` содержит:
 
 ```json
 {
@@ -44,54 +44,54 @@ The `$HOME/.cai/usage.json` file contains:
 }
 ```
 
-## Viewing Usage Statistics
+## Просмотр статистики использования
 
-### Command Line Tool
+### Инструмент командной строки
 ```bash
 python examples/basic/usage_tracking_example.py
 ```
 
-This displays:
-- Overall usage totals
-- Usage by model
-- Recent daily usage
-- Recent session history
+Это показывает:
+- Общие итоги по использованию
+- Использование по моделям
+- Последнее ежедневное использование
+- Историю недавних сессий
 
-### Export Usage Report
+### Экспорт отчёта об использовании
 ```bash
 python examples/basic/usage_tracking_example.py export [filename]
 ```
 
-### Reset Usage Statistics
+### Сброс статистики использования
 ```bash
 python examples/basic/usage_tracking_example.py reset
 ```
 
-## Disabling Usage Tracking
+## Отключение отслеживания использования
 
-If you prefer not to track usage globally, set the environment variable:
+Если вы не хотите вести глобальное отслеживание, установите переменную окружения:
 
 ```bash
 export CAI_DISABLE_USAGE_TRACKING=true
 ```
 
-## Implementation Details
+## Детали реализации
 
-The usage tracking is implemented in:
-- `src/cai/sdk/agents/global_usage_tracker.py` - Core tracking logic
-- `src/cai/sdk/agents/models/openai_chatcompletions.py` - Integration points
-- `src/cai/cli.py` - Session start/end hooks
+Отслеживание использования реализовано в:
+- `src/cai/sdk/agents/global_usage_tracker.py` — основная логика отслеживания
+- `src/cai/sdk/agents/models/openai_chatcompletions.py` — точки интеграции
+- `src/cai/cli.py` — хуки начала/окончания сессии
 
-### Key Features:
-- **Thread-Safe**: Uses locks to ensure data consistency
-- **Interrupt-Safe**: Handles Ctrl+C gracefully without blocking
-- **Atomic Writes**: Uses temporary files and atomic rename operations
-- **Periodic Saves**: Saves every 10 requests to minimize I/O
-- **Error Resilient**: Silently continues if tracking fails
+### Основные функции:
+- **Потокобезопасность**: использование блокировок для согласованности данных
+- **Обработка прерываний**: аккуратная работа с Ctrl+C без блокировки
+- **Атомарная запись**: использование временных файлов и атомарного переименования
+- **Периодические сохранения**: запись каждые 10 запросов для минимизации I/O
+- **Устойчивость к ошибкам**: продолжает работу в тишине, если отслеживание не удаётся
 
-## Privacy
+## Конфиденциальность
 
-All usage data is stored locally in your home directory. No data is sent to external servers. The tracking only records:
+Все данные об использовании хранятся локально в домашней директории. Никакие данные не отправляются на внешние серверы. Отслеживаются только:
 - Token counts
 - Costs
 - Model names

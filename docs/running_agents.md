@@ -1,10 +1,10 @@
-# Running agents
+# Запуск агентов
 
-You can run agents via the [`Runner`][cai.sdk.agents.run.Runner] class. You have 3 options:
+Агентов можно запускать через класс [`Runner`][cai.sdk.agents.run.Runner]. Есть 3 варианта:
 
-1. [`Runner.run()`][cai.sdk.agents.run.Runner.run], which runs async and returns a [`RunResult`][cai.sdk.agents.result.RunResult].
-2. [`Runner.run_sync()`][cai.sdk.agents.run.Runner.run_sync], which is a sync method and just runs `.run()` under the hood.
-3. [`Runner.run_streamed()`][cai.sdk.agents.run.Runner.run_streamed], which runs async and returns a [`RunResultStreaming`][cai.sdk.agents.result.RunResultStreaming]. It calls the LLM in streaming mode, and streams those events to you as they are received.
+1. [`Runner.run()`][cai.sdk.agents.run.Runner.run] — асинхронный метод, возвращает [`RunResult`][cai.sdk.agents.result.RunResult].
+2. [`Runner.run_sync()`][cai.sdk.agents.run.Runner.run_sync] — синхронный метод, который вызывает `.run()` под капотом.
+3. [`Runner.run_streamed()`][cai.sdk.agents.run.Runner.run_streamed] — асинхронный метод, возвращает [`RunResultStreaming`][cai.sdk.agents.result.RunResultStreaming]. Он выполняет LLM в потоковом режиме и передаёт события по мере их поступления.
 
 ```python
 from cai.sdk.agents import Agent, Runner
@@ -19,77 +19,75 @@ async def main():
     # Infinite loop's dance.
 ```
 
-Read more in the [results guide](results.md).
+Подробнее см. в [руководстве по результатам](results.md).
 
-## The agent loop
+## Цикл агента
 
-When you use the run method in `Runner`, you pass in a starting agent and input. The input can either be a string (which is considered a user message), or a list of input items, which are the items in the OpenAI Responses API.
+При вызове метода run в `Runner` вы передаёте стартового агента и ввод. Ввод может быть строкой (рассматривается как сообщение от пользователя) или списком элементов ввода, соответствующих элементам OpenAI Responses API.
 
-The runner then runs a loop:
+Runner выполняет цикл:
 
-1. We call the LLM for the current agent, with the current input.
-2. The LLM produces its output.
-    1. If the LLM returns a `final_output`, the loop ends and we return the result.
-    2. If the LLM does a handoff, we update the current agent and input, and re-run the loop.
-    3. If the LLM produces tool calls, we run those tool calls, append the results, and re-run the loop.
-3. If we exceed the `max_turns` passed, we raise a [`MaxTurnsExceeded`][cai.sdk.agents.exceptions.MaxTurnsExceeded] exception.
+1. Мы вызываем LLM для текущего агента с текущим вводом.
+2. LLM генерирует вывод.
+    1. Если LLM возвращает `final_output`, цикл завершается и мы возвращаем результат.
+    2. Если LLM выполняет handoff, мы обновляем текущего агента и ввод и повторно запускаем цикл.
+    3. Если LLM создаёт вызовы инструментов, мы выполняем эти вызовы, добавляем результаты и снова запускаем цикл.
+3. Если мы превышаем переданное `max_turns`, выбрасывается исключение [`MaxTurnsExceeded`][cai.sdk.agents.exceptions.MaxTurnsExceeded].
 
 !!! note
 
-    The rule for whether the LLM output is considered as a "final output" is that it produces text output with the desired type, and there are no tool calls.
+    Правило, по которому вывод LLM считается "финальным", таково: он выдаёт текстовый результат нужного типа, и при этом нет вызовов инструментов.
 
-## Streaming
+## Потоковая передача
 
-Streaming allows you to additionally receive streaming events as the LLM runs. Once the stream is done, the [`RunResultStreaming`][cai.sdk.agents.result.RunResultStreaming] will contain the complete information about the run, including all the new outputs produces. You can call `.stream_events()` for the streaming events. Read more in the [streaming guide](streaming.md).
+Потоковая передача позволяет получать события по мере выполнения LLM. Когда поток завершится, [`RunResultStreaming`][cai.sdk.agents.result.RunResultStreaming] будет содержать полную информацию о запуске, включая все новые результаты. Вы можете вызвать `.stream_events()` для получения потоковых событий. Подробнее см. [руководство по streaming](streaming.md).
 
-## Run config
+Параметр `run_config` позволяет настраивать глобальные параметры запуска агента:
 
-The `run_config` parameter lets you configure some global settings for the agent run:
+-   [`model`][cai.sdk.agents.run.RunConfig.model]: позволяет задать глобальную модель LLM независимо от модели каждого агента.
+-   [`model_provider`][cai.sdk.agents.run.RunConfig.model_provider]: провайдер моделей для поиска имён моделей, по умолчанию OpenAI.
+-   [`model_settings`][cai.sdk.agents.run.RunConfig.model_settings]: переопределяет настройки, специфичные для агента. Например, глобальные `temperature` или `top_p`.
+-   [`input_guardrails`][cai.sdk.agents.run.RunConfig.input_guardrails], [`output_guardrails`][cai.sdk.agents.run.RunConfig.output_guardrails]: список входных или выходных guardrail'ов, применяемых ко всем запускам.
+-   [`handoff_input_filter`][cai.sdk.agents.run.RunConfig.handoff_input_filter]: глобальный фильтр входа для всех handoff'ов, если у handoff'а ещё нет собственного. Фильтр позволяет изменять вход, передаваемый новому агенту. Подробнее см. [`Handoff.input_filter`][cai.sdk.agents.handoffs.Handoff.input_filter].
+-   [`tracing_disabled`][cai.sdk.agents.run.RunConfig.tracing_disabled]: позволяет отключить [trейсинг](tracing.md) для всего запуска.
+-   [`trace_include_sensitive_data`][cai.sdk.agents.run.RunConfig.trace_include_sensitive_data]: настраивает, будут ли трассы содержать потенциально чувствительные данные, такие как входы/выходы LLM и вызовов инструментов.
+-   [`workflow_name`][cai.sdk.agents.run.RunConfig.workflow_name], [`trace_id`][cai.sdk.agents.run.RunConfig.trace_id], [`group_id`][cai.sdk.agents.run.RunConfig.group_id]: задаёт имя рабочего процесса трассировки, идентификатор трассы и идентификатор группы для запуска. Рекомендуется задавать как минимум `workflow_name`. Идентификатор сессии — необязательное поле, которое позволяет связывать трассы между разными запусками.
+-   [`trace_metadata`][cai.sdk.agents.run.RunConfig.trace_metadata]: метаданные для всех трасс.
 
--   [`model`][cai.sdk.agents.run.RunConfig.model]: Allows setting a global LLM model to use, irrespective of what `model` each Agent has.
--   [`model_provider`][cai.sdk.agents.run.RunConfig.model_provider]: A model provider for looking up model names, which defaults to OpenAI.
--   [`model_settings`][cai.sdk.agents.run.RunConfig.model_settings]: Overrides agent-specific settings. For example, you can set a global `temperature` or `top_p`.
--   [`input_guardrails`][cai.sdk.agents.run.RunConfig.input_guardrails], [`output_guardrails`][cai.sdk.agents.run.RunConfig.output_guardrails]: A list of input or output guardrails to include on all runs.
--   [`handoff_input_filter`][cai.sdk.agents.run.RunConfig.handoff_input_filter]: A global input filter to apply to all handoffs, if the handoff doesn't already have one. The input filter allows you to edit the inputs that are sent to the new agent. See the documentation in [`Handoff.input_filter`][cai.sdk.agents.handoffs.Handoff.input_filter] for more details.
--   [`tracing_disabled`][cai.sdk.agents.run.RunConfig.tracing_disabled]: Allows you to disable [tracing](tracing.md) for the entire run.
--   [`trace_include_sensitive_data`][cai.sdk.agents.run.RunConfig.trace_include_sensitive_data]: Configures whether traces will include potentially sensitive data, such as LLM and tool call inputs/outputs.
--   [`workflow_name`][cai.sdk.agents.run.RunConfig.workflow_name], [`trace_id`][cai.sdk.agents.run.RunConfig.trace_id], [`group_id`][cai.sdk.agents.run.RunConfig.group_id]: Sets the tracing workflow name, trace ID and trace group ID for the run. We recommend at least setting `workflow_name`. The session ID is an optional field that lets you link traces across multiple runs.
--   [`trace_metadata`][cai.sdk.agents.run.RunConfig.trace_metadata]: Metadata to include on all traces.
+## Разговоры / chat threads
 
-## Conversations/chat threads
+Вызов любого метода run может привести к запуску одного или нескольких агентов (и, следовательно, одного или нескольких запросов к LLM), но это считается одним логическим ходом в чат-разговоре. Например:
 
-Calling any of the run methods can result in one or more agents running (and hence one or more LLM calls), but it represents a single logical turn in a chat conversation. For example:
+1. Ход пользователя: пользователь вводит текст
+2. Запуск Runner: первый агент вызывает LLM, выполняет инструменты, передаёт задачу второму агенту, второй агент выполняет дополнительные инструменты и затем формирует результат.
 
-1. User turn: user enter text
-2. Runner run: first agent calls LLM, runs tools, does a handoff to a second agent, second agent runs more tools, and then produces an output.
+В конце запуска агента вы можете выбрать, что показать пользователю. Например, можно показать все новые элементы, сгенерированные агентами, или только финальный результат. Пользователь может задать уточняющий вопрос, и тогда можно снова вызвать метод run.
 
-At the end of the agent run, you can choose what to show to the user. For example, you might show the user every new item generated by the agents, or just the final output. Either way, the user might then ask a followup question, in which case you can call the run method again.
-
-You can use the base [`RunResultBase.to_input_list()`][cai.sdk.agents.result.RunResultBase.to_input_list] method to get the inputs for the next turn.
+Вы можете использовать метод [`RunResultBase.to_input_list()`][cai.sdk.agents.result.RunResultBase.to_input_list], чтобы получить ввод для следующего хода.
 
 ```python
 async def main():
     agent = Agent(name="Assistant", instructions="Reply very concisely.")
 
     with trace(workflow_name="Conversation", group_id=thread_id):
-        # First turn
+        # Первый ход
         result = await Runner.run(agent, "What is phishing?")
         print(result.final_output)
-        # Expected: A type of cyberattack where users are tricked into giving sensitive info.
+        # Ожидается: Тип кибератаки, при которой пользователей вводят в заблуждение, чтобы получить конфиденциальную информацию.
         
-        # Second turn
+        # Второй ход
         new_input = result.to_input_list() + [{"role": "user", "content": "How can I protect myself from it?"}]
         result = await Runner.run(agent, new_input)
         print(result.final_output)
-        # Expected: Use email filters, don't click unknown links, and enable 2FA.
+        # Ожидается: Используйте фильтры электронной почты, не переходите по подозрительным ссылкам и включите двухфакторную аутентификацию.
 ```
 
-## Exceptions
+## Исключения
 
-The SDK raises exceptions in certain cases. The full list is in [`cai.sdk.agents.exceptions`][]. As an overview:
+SDK выбрасывает исключения в определённых случаях. Полный список доступен в [`cai.sdk.agents.exceptions`][]. Краткий обзор:
 
--   [`AgentsException`][cai.sdk.agents.exceptions.AgentsException] is the base class for all exceptions raised.
--   [`MaxTurnsExceeded`][cai.sdk.agents.exceptions.MaxTurnsExceeded] is raised when the run exceeds the `max_turns` passed to the run methods.
--   [`ModelBehaviorError`][cai.sdk.agents.exceptions.ModelBehaviorError] is raised when the model produces invalid outputs, e.g. malformed JSON or using non-existent tools.
--   [`UserError`][cai.sdk.agents.exceptions.UserError] is raised when you (the person writing code using CAI) make an error using it .
--   [`InputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.InputGuardrailTripwireTriggered], [`OutputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.OutputGuardrailTripwireTriggered] is raised when a [guardrail](guardrails.md) is tripped.
+-   [`AgentsException`][cai.sdk.agents.exceptions.AgentsException] — базовый класс для всех исключений.
+-   [`MaxTurnsExceeded`][cai.sdk.agents.exceptions.MaxTurnsExceeded] — выбрасывается, когда запуск превышает переданное `max_turns`.
+-   [`ModelBehaviorError`][cai.sdk.agents.exceptions.ModelBehaviorError] — выбрасывается, когда модель генерирует некорректный вывод, например malformed JSON или вызывает несуществующий инструмент.
+-   [`UserError`][cai.sdk.agents.exceptions.UserError] — выбрасывается, когда вы (разработчик, использующий CAI) совершаете ошибку.
+-   [`InputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.InputGuardrailTripwireTriggered], [`OutputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.OutputGuardrailTripwireTriggered] — выбрасываются, когда срабатывает [guardrail](guardrails.md).

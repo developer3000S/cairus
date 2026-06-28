@@ -1,43 +1,43 @@
 # Guardrails
 
-Guardrails run _in parallel_ to your agents, enabling you to do checks and validations of user input. For example, imagine you have an agent that uses a very smart (and hence slow/expensive) model to help with customer requests. You wouldn't want malicious users to ask the model to help them with their math homework. So, you can run a guardrail with a fast/cheap model. If the guardrail detects malicious usage, it can immediately raise an error, which stops the expensive model from running and saves you time/money.
+Guardrails работают _параллельно_ с вашими агентами и позволяют выполнять проверки и валидации пользовательского ввода. Например, представьте, что у вас есть агент, который использует очень умную (а значит медленную и дорогую) модель для помощи клиентам. Вы не захотите, чтобы злоумышленники просили модель помочь им с домашним заданием по математике. Поэтому вы можете запустить guardrail на быстрой и дешёвой модели. Если guardrail обнаружит вредоносное использование, он сразу генерирует ошибку, что остановит выполнение дорогой модели и сэкономит вам время/деньги.
 
-There are two kinds of guardrails:
+Существует два типа guardrails:
 
-1. Input guardrails run on the initial user input
-2. Output guardrails run on the final agent output
+1. Input guardrails работают на начальном пользовательском вводе
+2. Output guardrails работают на конечном выводе агента
 
 ## Input guardrails
 
-Input guardrails run in 3 steps:
+Input guardrails выполняются в 3 этапа:
 
-1. First, the guardrail receives the same input passed to the agent.
-2. Next, the guardrail function runs to produce a [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput], which is then wrapped in an [`InputGuardrailResult`][cai.sdk.agents.guardrail.InputGuardrailResult]
-3. Finally, we check if [`.tripwire_triggered`][cai.sdk.agents.guardrail.GuardrailFunctionOutput.tripwire_triggered] is true. If true, an [`InputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.InputGuardrailTripwireTriggered] exception is raised, so you can appropriately respond to the user or handle the exception.
+1. Сначала guardrail получает тот же ввод, что был передан агенту.
+2. Затем выполняется функция guardrail, чтобы получить [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput], который затем оборачивается в [`InputGuardrailResult`][cai.sdk.agents.guardrail.InputGuardrailResult].
+3. Наконец, проверяется, равно ли [`.tripwire_triggered`][cai.sdk.agents.guardrail.GuardrailFunctionOutput.tripwire_triggered] `true`. Если да, то выбрасывается исключение [`InputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.InputGuardrailTripwireTriggered], чтобы вы могли корректно обработать ситуацию.
 
 !!! Note
 
-    Input guardrails are intended to run on user input, so an agent's guardrails only run if the agent is the *first* agent. You might wonder, why is the `guardrails` property on the agent instead of passed to `Runner.run`? It's because guardrails tend to be related to the actual Agent - you'd run different guardrails for different agents, so colocating the code is useful for readability.
+    Input guardrails предназначены для работы с пользовательским вводом, поэтому guardrails агента выполняются только если агент является *первым* агентом. Возможно, вы спросите: почему свойство `guardrails` находится на агенте, а не передаётся в `Runner.run`? Потому что guardrails обычно связаны с конкретным агентом — для разных агентов нужны разные guardrails, поэтому удобно хранить их рядом с определением агента.
 
 ## Output guardrails
 
-Output guardrails run in 3 steps:
+Output guardrails выполняются в 3 этапа:
 
-1. First, the guardrail receives the same input passed to the agent.
-2. Next, the guardrail function runs to produce a [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput], which is then wrapped in an [`OutputGuardrailResult`][cai.sdk.agents.guardrail.OutputGuardrailResult]
-3. Finally, we check if [`.tripwire_triggered`][cai.sdk.agents.guardrail.GuardrailFunctionOutput.tripwire_triggered] is true. If true, an [`OutputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.OutputGuardrailTripwireTriggered] exception is raised, so you can appropriately respond to the user or handle the exception.
+1. Сначала guardrail получает тот же ввод, что был передан агенту.
+2. Затем выполняется функция guardrail, чтобы получить [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput], который затем оборачивается в [`OutputGuardrailResult`][cai.sdk.agents.guardrail.OutputGuardrailResult].
+3. Наконец, проверяется, равно ли [`.tripwire_triggered`][cai.sdk.agents.guardrail.GuardrailFunctionOutput.tripwire_triggered] `true`. Если да, то выбрасывается исключение [`OutputGuardrailTripwireTriggered`][cai.sdk.agents.exceptions.OutputGuardrailTripwireTriggered], чтобы вы могли корректно обработать ситуацию.
 
 !!! Note
 
-    Output guardrails are intended to run on the final agent output, so an agent's guardrails only run if the agent is the *last* agent. Similar to the input guardrails, we do this because guardrails tend to be related to the actual Agent - you'd run different guardrails for different agents, so colocating the code is useful for readability.
+    Output guardrails предназначены для работы с итоговым выводом агента, поэтому guardrails агента выполняются только если агент является *последним* агентом. Как и в случае с input guardrails, это связано с тем, что guardrails обычно привязаны к конкретному агенту — для разных агентов нужны разные guardrails, поэтому удобно хранить их рядом с определением агента.
 
 ## Tripwires
 
-If the input or output fails the guardrail, the Guardrail can signal this with a tripwire. As soon as we see a guardrail that has triggered the tripwires, we immediately raise a `{Input,Output}GuardrailTripwireTriggered` exception and halt the Agent execution.
+Если ввод или вывод не проходят проверку guardrail, guardrail может сигнализировать об этом срабатыванием tripwire. Как только мы обнаруживаем сработавший guardrail, мы немедленно выбрасываем исключение `{Input,Output}GuardrailTripwireTriggered` и прекращаем выполнение агента.
 
-## Implementing a guardrail
+## Реализация guardrail
 
-You need to provide a function that receives input, and returns a [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput]. In this example, we'll do this by running an Agent under the hood.
+Вам нужно предоставить функцию, которая принимает ввод и возвращает [`GuardrailFunctionOutput`][cai.sdk.agents.guardrail.GuardrailFunctionOutput]. В этом примере мы реализуем это, запуская агента внутри guardrail.
 
 ```python
 from pydantic import BaseModel
@@ -90,12 +90,12 @@ async def main():
         print("Security guardrail tripped")
 ```
 
-1. We'll use this agent in our guardrail function.
-2. This is the guardrail function that receives the agent's input/context, and returns the result.
-3. We can include extra information in the guardrail result.
-4. This is the actual agent that defines the workflow.
+1. Этот агент будет использоваться внутри guardrail-функции.
+2. Это функция guardrail, которая получает ввод/контекст агента и возвращает результат.
+3. Мы можем включить дополнительную информацию в результат guardrail.
+4. Это сам агент, который определяет рабочий процесс.
 
-Output guardrails are similar.
+Output guardrails работают аналогично.
 
 ```python
 from pydantic import BaseModel
@@ -148,7 +148,7 @@ async def main():
         print("Data leakage guardrail tripped")
 ```
 
-1. This is the actual agent's output type.
-2. This is the guardrail's output type.
-3. This is the guardrail function that receives the agent's output, and returns the result.
-4. This is the actual agent that defines the workflow.
+1. Это тип вывода самого агента.
+2. Это тип вывода guardrail.
+3. Это функция guardrail, которая получает вывод агента и возвращает результат.
+4. Это сам агент, который определяет рабочий процесс.

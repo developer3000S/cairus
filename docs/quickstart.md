@@ -1,8 +1,8 @@
-# Quickstart
+# Быстрый старт
 
-## Create a project and virtual environment
+## Создайте проект и виртуальное окружение
 
-You'll only need to do this once.
+Это нужно сделать только один раз.
 
 ```bash
 mkdir my_project
@@ -10,31 +10,31 @@ cd my_project
 python -m venv .venv
 ```
 
-### Activate the virtual environment
+### Активируйте виртуальное окружение
 
-Do this every time you start a new terminal session.
+Делайте это при каждом новом запуске терминала.
 
 ```bash
 source .venv/bin/activate
 ```
 
-### Install the Agents SDK
+### Установите Agents SDK
 
 ```bash
-pip install openai-agents # or `uv add openai-agents`, etc
+pip install openai-agents # или `uv add openai-agents`, и т.д.
 ```
 
-### Set an OpenAI API key
+### Установите OpenAI API-ключ
 
-If you don't have one, follow [these instructions](https://platform.openai.com/docs/quickstart#create-and-export-an-api-key) to create an OpenAI API key.
+Если у вас ещё нет ключа, выполните [инструкции](https://platform.openai.com/docs/quickstart#create-and-export-an-api-key) для создания OpenAI API-ключа.
 
 ```bash
 export OPENAI_API_KEY=sk-...
 ```
 
-## Create your first agent
+## Создайте первого агента
 
-Agents are defined with instructions, a name, and optional config (such as `model_config`)
+Агенты определяются инструкциями, именем и опциональной конфигурацией (например, `model_config`).
 
 ```python
 from cai.sdk.agents import Agent
@@ -45,9 +45,9 @@ agent = Agent(
 )
 ```
 
-## Add a few more agents
+## Добавьте ещё несколько агентов
 
-Additional agents can be defined in the same way. `handoff_descriptions` provide additional context for determining handoff routing
+Дополнительных агентов можно определять таким же образом. `handoff_descriptions` дают дополнительный контекст для маршрутизации передачи задач.
 
 ```python
 from cai.sdk.agents import Agent
@@ -65,9 +65,9 @@ math_tutor_agent = Agent(
 )
 ```
 
-## Define your handoffs
+## Определите handoff'ы
 
-On each agent, you can define an inventory of outgoing handoff options that the agent can choose from to decide how to make progress on their task.
+Для каждого агента можно задать набор вариантов передачи, из которых агент будет выбирать, чтобы продвигаться к своей задаче.
 
 ```python
 triage_agent = Agent(
@@ -77,9 +77,9 @@ triage_agent = Agent(
 )
 ```
 
-## Run the agent orchestration
+## Запустите оркестровку агентов
 
-Let's check that the workflow runs and the triage agent correctly routes between the two specialist agents.
+Проверим, что workflow работает, и triage-agent правильно направляет запросы между двумя специалистами.
 
 ```python
 from cai.sdk.agents import Runner
@@ -89,9 +89,9 @@ async def main():
     print(result.final_output)
 ```
 
-## Add a guardrail
+## Добавьте guardrail
 
-You can define custom guardrails to run on the input or output.
+Вы можете определить собственные guardrail'ы для входных или выходных данных.
 
 ```python
 from cai.sdk.agents import GuardrailFunctionOutput, Agent, Runner
@@ -116,12 +116,12 @@ async def homework_guardrail(ctx, agent, input_data):
     )
 ```
 
-## Put it all together
+## Соберём всё вместе
 
-Let's put it all together and run the entire workflow, using handoffs and the input guardrail.
+Теперь соберём всё в один пример и запустим workflow с handoff'ами и входным guardrail'ом.
 
 ```python
-from cai.sdk.agents import Agent, InputGuardrail,GuardrailFunctionOutput, Runner
+from cai.sdk.agents import Agent, InputGuardrail, GuardrailFunctionOutput, Runner
 from pydantic import BaseModel
 import asyncio
 
@@ -176,14 +176,14 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## View your traces
+## Просмотр трассировки
 
-To review what happened during your agent run, navigate to the [Trace viewer in the OpenAI Dashboard](https://platform.openai.com/traces) to view traces of your agent runs.
+Чтобы посмотреть, что происходило во время запуска агента, перейдите в [Trace viewer в OpenAI Dashboard](https://platform.openai.com/traces).
 
-## Next steps
+## Следующие шаги
 
-Learn how to build more complex agentic flows:
+Узнайте, как строить более сложные agentic-потоки:
 
--   Learn about how to configure [Agents](agents.md).
--   Learn about [running agents](running_agents.md).
--   Learn about [tools](tools.md), [guardrails](guardrails.md) and [models](models.md).
+-   Изучите настройку [Agents](agents.md).
+-   Изучите [запуск агентов](running_agents.md).
+-   Изучите [tools](tools.md), [guardrails](guardrails.md) и [models](models.md).

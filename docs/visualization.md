@@ -1,24 +1,24 @@
-# Agent Visualization
+# Визуализация агентов
 
-Agent visualization allows you to generate a structured graphical representation of agents and their relationships using **Graphviz**. This is useful for understanding how agents, tools, and handoffs interact within an application.
+Визуализация агентов позволяет сгенерировать структурное графическое представление агентов и их связей с помощью **Graphviz**. Это помогает понять, как агенты, инструменты и handoff взаимодействуют в приложении.
 
-## Installation
+## Установка
 
-Install the optional `viz` dependency group:
+Установите дополнительную группу зависимостей `viz`:
 
 ```bash
 pip install "openai-agents[viz]"
 ```
 
-## Generating a Graph
+## Генерация графа
 
-You can generate an agent visualization using the `draw_graph` function. This function creates a directed graph where:
+Вы можете создать визуализацию агента с помощью функции `draw_graph`. Эта функция строит ориентированный граф, в котором:
 
-- **Agents** are represented as yellow boxes.
-- **Tools** are represented as green ellipses.
-- **Handoffs** are directed edges from one agent to another.
+- **Агенты** отображаются жёлтыми прямоугольниками.
+- **Инструменты** отображаются зелёными эллипсами.
+- **Handoffs** отображаются направленными ребрами от одного агента к другому.
 
-### Example Usage
+### Пример использования
 
 ```python
 from agents import Agent, function_tool
@@ -50,37 +50,36 @@ draw_graph(triage_agent)
 
 ![Agent Graph](./assets/images/graph.png)
 
-This generates a graph that visually represents the structure of the **triage agent** and its connections to sub-agents and tools.
+Это создаёт граф, который визуально показывает структуру **triage agent** и его связи с дочерними агентами и инструментами.
 
+## Понимание визуализации
 
-## Understanding the Visualization
+Сгенерированный граф включает:
 
-The generated graph includes:
+- **стартовую вершину** (`__start__`), обозначающую точку входа.
+- Агенты, представленные в виде **прямоугольников** с жёлтым фоном.
+- Инструменты, представленные в виде **эллипсов** с зелёным фоном.
+- Направленные рёбра, показывающие взаимодействия:
+  - **Сплошные стрелки** для handoff между агентами.
+  - **Пунктирные стрелки** для вызова инструментов.
+- **концевую вершину** (`__end__`), обозначающую место завершения выполнения.
 
-- A **start node** (`__start__`) indicating the entry point.
-- Agents represented as **rectangles** with yellow fill.
-- Tools represented as **ellipses** with green fill.
-- Directed edges indicating interactions:
-  - **Solid arrows** for agent-to-agent handoffs.
-  - **Dotted arrows** for tool invocations.
-- An **end node** (`__end__`) indicating where execution terminates.
+## Настройка графа
 
-## Customizing the Graph
-
-### Showing the Graph
-By default, `draw_graph` displays the graph inline. To show the graph in a separate window, write the following:
+### Отображение графа
+По умолчанию `draw_graph` отображает граф встроено. Чтобы показать его в отдельном окне, используйте:
 
 ```python
 draw_graph(triage_agent).view()
 ```
 
-### Saving the Graph
-By default, `draw_graph` displays the graph inline. To save it as a file, specify a filename:
+### Сохранение графа
+По умолчанию `draw_graph` отображает граф встроено. Чтобы сохранить его в файл, укажите имя файла:
 
 ```python
 draw_graph(triage_agent, filename="agent_graph.png")
 ```
 
-This will generate `agent_graph.png` in the working directory.
+Это создаст файл `agent_graph.png` в рабочем каталоге.
 
 

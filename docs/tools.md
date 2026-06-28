@@ -258,7 +258,7 @@ async def run_function(ctx: RunContextWrapper[Any], args: str) -> str:
 
 tool = FunctionTool(
     name="process_user",
-    description="Processes extracted user data",
+    description="Обрабатывает извлечённые пользовательские данные",
     params_json_schema=FunctionArgs.model_json_schema(),
     on_invoke_tool=run_function,
 )
@@ -302,8 +302,8 @@ log_analyzer_agent = Agent(
 cyber_orchestrator_agent = Agent(
     name="Cyber Orchestrator",
     instructions=(
-        "You are a cybersecurity assistant. Based on the user's request, you decide whether to scan an IP or analyze a log. "
-        "Use the appropriate tool for each task."
+        "Вы помощник по кибербезопасности. Основываясь на запросе пользователя, вы решаете, нужно ли сканировать IP или анализировать лог. "
+        "Используйте подходящий инструмент для каждой задачи."
     ),
     tools=[
         ip_scanner_agent.as_tool(

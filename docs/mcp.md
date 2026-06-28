@@ -1,21 +1,21 @@
 # Model context protocol (MCP)
 
-The [Model context protocol](https://modelcontextprotocol.io/introduction) (aka MCP) is a way to provide tools and context to the LLM. From the MCP docs:
+[Model context protocol](https://modelcontextprotocol.io/introduction) (или MCP) — это способ предоставить инструменты и контекст LLM. Из документации MCP:
 
-> MCP is an open protocol that standardizes how applications provide context to LLMs. Think of MCP like a USB-C port for AI applications. Just as USB-C provides a standardized way to connect your devices to various peripherals and accessories, MCP provides a standardized way to connect AI models to different data sources and tools.
+> MCP — это открытый протокол, стандартизирующий способ предоставления контекста LLM. Представьте MCP как USB-C для AI-приложений. Точно так же, как USB-C обеспечивает стандартное подключение устройств к периферии, MCP предоставляет стандартный способ подключения моделей к различным источникам данных и инструментам.
 
-MCP enables you to use a wide range of MCP servers to provide tools to your Agents.
+MCP позволяет использовать широкий спектр MCP-серверов для предоставления инструментов вашим агентам.
 
-## MCP servers
+## MCP-серверы
 
-Currently, the MCP spec defines two kinds of servers, based on the transport mechanism they use:
+В настоящее время спецификация MCP определяет два типа серверов в зависимости от используемого транспорта:
 
-1. **stdio** servers run as a subprocess of your application. You can think of them as running "locally".
-2. **HTTP over SSE** servers run remotely. You connect to them via a URL.
+1. **stdio** серверы запускаются как подпроцесс вашего приложения. Можно считать, что они работают «локально».
+2. **HTTP over SSE** серверы работают удалённо. Вы подключаетесь к ним по URL.
 
-You can use the [`MCPServerStdio`][cai.sdk.agents.mcp.server.MCPServerStdio] and [`MCPServerSse`][cai.sdk.agents.mcp.server.MCPServerSse] classes to connect to these servers.
+Вы можете использовать классы [`MCPServerStdio`][cai.sdk.agents.mcp.server.MCPServerStdio] и [`MCPServerSse`][cai.sdk.agents.mcp.server.MCPServerSse] для подключения к таким серверам.
 
-For example, this is how you'd use the [official MCP filesystem server](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem).
+Например, так можно использовать [официальный MCP файловый сервер](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem).
 
 ```python
 async with MCPServerStdio(
@@ -27,14 +27,14 @@ async with MCPServerStdio(
     tools = await server.list_tools()
 ```
 
-## Using MCP servers
+## Использование MCP-серверов
 
-MCP servers can be added to agents. The runner collects tools from each server (via `list_tools()`) when the agent runs, so the model can call them; each invocation uses the server's `call_tool()`.
+MCP-серверы можно добавлять к агентам. Во время запуска агент собирает инструменты с каждого сервера (через `list_tools()`), чтобы модель могла их вызвать; каждый вызов использует `call_tool()` сервера.
 
 ```python
 from cai.sdk.agents import Agent
 
-# mcp_server_1 and mcp_server_2 are connected MCPServerStdio / MCPServerSse instances.
+# mcp_server_1 и mcp_server_2 — это подключённые экземпляры MCPServerStdio / MCPServerSse.
 cybersecurity_lead = Agent(
     name="Cybersecurity Lead Agent",
     instructions="Use the tools to solve the task.",
@@ -42,20 +42,20 @@ cybersecurity_lead = Agent(
 )
 ```
 
-## Caching
+## Кэширование
 
-Every time an Agent runs, it calls `list_tools()` on the MCP server. This can be a latency hit, especially if the server is a remote server. To automatically cache the list of tools, you can pass `cache_tools_list=True` to both [`MCPServerStdio`][cai.sdk.agents.mcp.server.MCPServerStdio] and [`MCPServerSse`][cai.sdk.agents.mcp.server.MCPServerSse]. You should only do this if you're certain the tool list will not change.
+Каждый раз при запуске агента вызывается `list_tools()` на MCP-сервере. Это может добавлять задержку, особенно если сервер удалённый. Чтобы автоматически кэшировать список инструментов, можно передать `cache_tools_list=True` как в [`MCPServerStdio`][cai.sdk.agents.mcp.server.MCPServerStdio], так и в [`MCPServerSse`][cai.sdk.agents.mcp.server.MCPServerSse]. Делайте это только если уверены, что список инструментов не будет меняться.
 
-If you want to invalidate the cache, you can call `invalidate_tools_cache()` on the servers.
+Если вы хотите сбросить кэш, вызовите `invalidate_tools_cache()` на сервере.
 
 ## End-to-end examples
 
-See the `examples/mcp/` directory in the CAI repository for runnable scripts (stdio and SSE patterns).
+Смотрите директорию `examples/mcp/` в репозитории CAI для runnable-скриптов (стиль stdio и SSE).
 
 
-## Tracing   
-[Tracing](./tracing.md) automatically captures MCP operations, including:
+## Трейсинг   
+[Tracing](./tracing.md) автоматически записывает MCP-операции, включая:
 
-1. Calls to the MCP server to list tools
-2. MCP-related info on function calls
+1. Вызовы MCP-сервера для получения списка инструментов
+2. MCP-данные в информации о вызовах функций
 ![MCP Tracing Screenshot](./assets/images/mcp-tracing.jpg)

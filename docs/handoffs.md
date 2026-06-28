@@ -1,18 +1,18 @@
 # Handoffs
 
-Handoffs allow an agent to delegate tasks to another agent. This is particularly useful in scenarios where different agents specialize in distinct areas. For example, a customer support app might have agents that each specifically handle tasks like order status, refunds, FAQs, etc.
+Handoffs позволяют агенту делегировать задачу другому агенту. Это особенно полезно в сценариях, где разные агенты специализируются на разных областях. Например, в приложении поддержки клиентов могут быть агенты, которые обрабатывают только статус заказа, возвраты, часто задаваемые вопросы и т.п.
 
-Handoffs are represented as tools to the LLM. So if there's a handoff to an agent named `Flag Discriminator`, the tool would be called `transfer_to_flag_discriminator`.
+Handoffs представлены как инструменты для LLM. Поэтому если происходит передача агенту с именем `Flag Discriminator`, инструмент будет называться `transfer_to_flag_discriminator`.
 
-## Creating a handoff
+## Создание handoff
 
-All agents have a [`handoffs`][cai.sdk.agents.agent.Agent.handoffs] param, which can either take an `Agent` directly, or a `Handoff` object that customizes the Handoff.
+У всех агентов есть параметр [`handoffs`][cai.sdk.agents.agent.Agent.handoffs], который может принимать либо сам `Agent`, либо объект `Handoff`, настраивающий передачу.
 
-You can create a handoff using the [`handoff()`][cai.sdk.agents.handoffs.handoff] function provided. This function allows you to specify the agent to hand off to, along with optional overrides and input filters.
+Вы можете создать handoff с помощью функции [`handoff()`][cai.sdk.agents.handoffs.handoff]. Эта функция позволяет указать агента, которому будет передана задача, а также опциональные переопределения и фильтры ввода.
 
-### Basic Usage
+### Базовое использование
 
-Here's how you can create a simple handoff:
+Вот как выглядит простое создание handoff:
 
 ```python
 from cai.sdk.agents import Agent, handoff
@@ -24,20 +24,18 @@ bash_agent = Agent(name="Bash Agent")
 cybersecurity_lead = Agent(name="Cybersecurity Lead Agent", handoffs=[crypto_agent, handoff(bash_agent)])
 ```
 
+1. Вы можете использовать агента напрямую (как `crypto_agent`) или использовать функцию `handoff()`.
 
+### Настройка handoff через функцию `handoff()`
 
-1. You can use the agent directly (as in `crypto_agent`), or you can use the `handoff()` function.
+Функция [`handoff()`][cai.sdk.agents.handoffs.handoff] позволяет настраивать передачу.
 
-### Customizing handoffs via the `handoff()` function
-
-The [`handoff()`][cai.sdk.agents.handoffs.handoff] function lets you customize things.
-
--   `agent`: This is the agent to which things will be handed off.
--   `tool_name_override`: By default, the `Handoff.default_tool_name()` function is used, which resolves to `transfer_to_<agent_name>`. You can override this.
--   `tool_description_override`: Override the default tool description from `Handoff.default_tool_description()`
--   `on_handoff`: A callback function executed when the handoff is invoked. This is useful for things like kicking off some data fetching as soon as you know a handoff is being invoked. This function receives the agent context, and can optionally also receive LLM generated input. The input data is controlled by the `input_type` param.
--   `input_type`: The type of input expected by the handoff (optional).
--   `input_filter`: This lets you filter the input received by the next agent. See below for more.
+-   `agent`: агент, которому будет передана задача.
+-   `tool_name_override`: по умолчанию используется `Handoff.default_tool_name()`, который превращает имя агента в `transfer_to_<agent_name>`. Это можно переопределить.
+-   `tool_description_override`: переопределяет описание инструмента по умолчанию, которое берётся из `Handoff.default_tool_description()`.
+-   `on_handoff`: callback-функция, выполняющаяся при вызове handoff. Это полезно для запуска дополнительной загрузки данных сразу после того, как handoff вызван. Эта функция получает контекст агента и может опционально принять входные данные от LLM. Входные данные контролируются параметром `input_type`.
+-   `input_type`: тип ожидаемого ввода для handoff (опционально).
+-   `input_filter`: позволяет фильтровать ввод, который получит следующий агент. Подробнее ниже.
 
 ```python
 from cai.sdk.agents import Agent, handoff, RunContextWrapper
@@ -55,9 +53,9 @@ handoff_obj = handoff(
 )
 ```
 
-## Handoff inputs
+## Входные данные handoff
 
-In certain situations, you want the LLM to provide some data when it calls a handoff. For example, imagine a handoff to an "Escalation agent". You might want a reason to be provided, so you can log it.
+В некоторых ситуациях вы хотите, чтобы LLM передавал дополнительные данные при вызове handoff. Например, если handoff идёт на «агента эскалации», может потребоваться причина, чтобы её можно было сохранить в лог.
 
 ```python
 from pydantic import BaseModel
@@ -79,11 +77,11 @@ handoff_obj = handoff(
 )
 ```
 
-## Input filters
+## Фильтры ввода
 
-When a handoff occurs, it's as though the new agent takes over the conversation, and gets to see the entire previous conversation history. If you want to change this, you can set an [`input_filter`][cai.sdk.agents.handoffs.Handoff.input_filter]. An input filter is a function that receives the existing input via a [`HandoffInputData`][cai.sdk.agents.handoffs.HandoffInputData], and must return a new `HandoffInputData`.
+Когда происходит handoff, создаётся впечатление, что новый агент принимает управление беседой и видит всю предыдущую историю. Если вы хотите изменить этот ввод, можно задать [`input_filter`][cai.sdk.agents.handoffs.Handoff.input_filter]. Фильтр ввода — это функция, которая получает текущие данные через [`HandoffInputData`][cai.sdk.agents.handoffs.HandoffInputData] и должна вернуть новый `HandoffInputData`.
 
-There are some common patterns (for example removing all tool calls from the history), which are implemented for you in [`cai.sdk.agents.extensions.handoff_filters`][]
+Есть несколько распространённых шаблонов (например, удаление всех вызовов инструментов из истории), которые реализованы за вас в [`cai.sdk.agents.extensions.handoff_filters`][].
 
 ```python
 from cai.sdk.agents import Agent, handoff
@@ -97,11 +95,11 @@ handoff_obj = handoff(
 )
 ```
 
-(1). This will automatically remove all tools from the history when `Network Agent` is called.
+(1). Это автоматически удалит все инструменты из истории, когда будет вызван `Network Agent`.
 
-## Recommended prompts
+## Рекомендуемые подсказки
 
-To make sure that LLMs understand handoffs properly, we recommend including information about handoffs in your agents. We have a suggested prefix in [`cai.sdk.agents.extensions.handoff_prompt.RECOMMENDED_PROMPT_PREFIX`][], or you can call [`cai.sdk.agents.extensions.handoff_prompt.prompt_with_handoff_instructions`][] to automatically add recommended data to your prompts.
+Чтобы LLM корректно понимало handoffs, мы рекомендуем включать информацию о handoff в промпты агентов. У нас есть предложенный префикс в [`cai.sdk.agents.extensions.handoff_prompt.RECOMMENDED_PROMPT_PREFIX`][]. Либо вы можете вызвать [`cai.sdk.agents.extensions.handoff_prompt.prompt_with_handoff_instructions`][], чтобы автоматически добавить рекомендуемые инструкции к промпту.
 
 ```python
 from cai.sdk.agents import Agent
@@ -114,10 +112,10 @@ billing_agent = Agent(
 )
 ```
 
-## All-in-one example
+## Пример «всё в одном»
 
 ```
-We will represent the following workflow. You can make it more or less complex, depending on your needs.
+Мы покажем следующий рабочий процесс. Вы можете сделать его проще или сложнее, в зависимости от ваших потребностей.
 
                      ┌───────────────────┐
                      │ Cybersecurity     │
@@ -149,17 +147,17 @@ import asyncio
 
 @function_tool
 def execute_cli_command(command: str) -> str:
-    """Execute a command-line command and return its output."""
+    """Выполняет команду командной строки и возвращает её вывод."""
     return run_command(command)
 
 
-# Create the Flag Discriminator Agent (terminal agent in the chain)
+# Создаём агент Flag Discriminator (терминальный агент в цепочке)
 flag_discriminator = Agent(
     name="Flag Discriminator Agent",
-    description="Agent specialized in verifying if content matches the expected flag format in CTF challenges",
+    description="Агент, специализирующийся на проверке, соответствует ли контент ожидаемому формату флага в CTF.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    You are an expert at identifying CTF flags. The final flag is the first file of a -ls command. You return the flag with this format: flag{{filename}}""",
-    handoff_description="Specialized agent in determining whether the content corresponds to the flag of the CTF challenge",
+    Вы эксперт по распознаванию CTF-флагов. Финальный флаг — это первый файл из вывода команды -ls. Вы возвращаете флаг в формате flag{{filename}}""",
+    handoff_description="Специализированный агент для определения, соответствует ли контент флагу CTF.",
     handoffs=[],
     model=OpenAIChatCompletionsModel(
         model=os.getenv('CAI_MODEL', "qwen2.5:72b"),
@@ -167,52 +165,52 @@ flag_discriminator = Agent(
     )
 )
 
-# Create the Bash Agent (can hand off to Flag Discriminator)
+# Создаём Bash Agent (может передавать задачу агенту Flag Discriminator)
 bash_agent = Agent(
     name="Bash Agent",
-    description="Agent specialized in Bash commands and Linux operations",
+    description="Агент, специализирующийся на bash-командах и операциях Linux.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    You are a Bash and Linux expert. Use your knowledge to navigate the file system and execute commands.
-    The final flag is the first element listed in the directory. 
-    When you find the name of the file, handoff to the Flag Discriminator Agent for verification.""",
+    Вы эксперт по Bash и Linux. Используйте свои знания, чтобы перемещаться по файловой системе и выполнять команды.
+    Финальный флаг — это первый элемент, указанный в директории.
+    Когда вы найдёте имя файла, передайте задачу агенту Flag Discriminator для проверки.""",
     tools=[execute_cli_command],
     handoffs=[handoff(flag_discriminator)],
-    handoff_description="Specialized agent in Bash commands and Linux operations",
+    handoff_description="Специализированный агент по bash-командам и операциям Linux.",
     model=OpenAIChatCompletionsModel(
         model=os.getenv('CAI_MODEL', "qwen2.5:14b"),
         openai_client=AsyncOpenAI(),
     )
 )
 
-# Create the Crypto Agent
+# Создаём Crypto Agent
 crypto_agent = Agent(
     name="Cryptography Agent",
-    description="Agent specialized in cryptography, ciphers, and encoding/decoding",
+    description="Агент, специализирующийся на криптографии, шифрах и кодировании/декодировании.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    You are a cryptography expert. Help decipher and decode encrypted messages or files.""",
+    Вы эксперт по криптографии. Помогайте расшифровывать и декодировать зашифрованные сообщения или файлы.""",
     tools=[execute_cli_command],
     handoffs=[],
-    handoff_description="Specialized agent in cryptography and codebreaking",
+    handoff_description="Специализированный агент по криптографии и взлому кода.",
     model=OpenAIChatCompletionsModel(
         model=os.getenv('CAI_MODEL', "qwen2.5:14b"),
         openai_client=AsyncOpenAI(),
     )
 )
 
-# Create the Cybersecurity Lead Agent (can hand off to both Bash and Crypto)
+# Создаём Cybersecurity Lead Agent (может передать задачу и Bash, и Crypto)
 cybersecurity_lead = Agent(
     name="Cybersecurity Lead Agent",
-    description="Lead agent focused on conquering security challenges by delegating to specialist agents",
+    description="Ведущий агент, сосредоточенный на решении задач безопасности с делегированием специализированным агентам.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
-    You are a Cybersecurity expert Leader facing cybersecurity challenges. 
-    - Hand off to the Bash Agent when you need to execute Linux commands or navigate the file system.
-    - Hand off to the Cryptography Agent when you encounter encrypted data or codes that need deciphering.""",
+    Вы эксперт по кибербезопасности, решающий задачи в области безопасности.
+    - Передавайте задачу Bash Agent, когда нужно выполнить Linux-команды или перемещаться по файловой системе.
+    - Передавайте задачу Cryptography Agent, когда вы сталкиваетесь с зашифрованными данными или кодами, которые нужно расшифровать.""",
     tools=[execute_cli_command],
     handoffs=[
         handoff(bash_agent),
         handoff(crypto_agent)
     ],
-    handoff_description="Lead agent in cybersecurity operations",
+    handoff_description="Ведущий агент по операциям кибербезопасности.",
     model=OpenAIChatCompletionsModel(
         model=os.getenv('CAI_MODEL', "qwen2.5:14b"),
         openai_client=AsyncOpenAI(),

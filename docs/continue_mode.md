@@ -2,25 +2,24 @@
 
 ## Обзор
 
-Флаг `--continue` позволяет агентам CAI работать автономно: система автоматически генерирует умные подсказки для продолжения, когда агент обычно останавливается и ждёт ввод пользователя. Эта функция использует анализ с ИИ, чтобы предоставлять контекстные рекомендации на основе истории диалога — благодаря этому агенты могут выполнять сложные задачи без ручного вмешательства.
+Флаг `--continue` позволяет агентам CAI работать автономно: система автоматически генерирует интеллектуальные подсказки для продолжения, когда агент обычно останавливается и ждёт ввода пользователя. Эта функция использует анализ с помощью ИИ, чтобы предоставлять контекстные рекомендации на основе истории диалога — благодаря этому агенты могут выполнять сложные задачи без ручного вмешательства.
 
 ## Быстрый старт
 
-
 ```bash
-# Tell jokes continuously
+# Рассказываем шутки непрерывно
 cai --continue --prompt "tell me a joke about security"
 
-# Analyze code autonomously  
+# Анализируем код автономно
 cai --continue --prompt "find all SQL injection vulnerabilities in this codebase"
 
-# Run security audit
+# Выполняем проверку безопасности
 cai --continue --prompt "perform a comprehensive security audit"
 ```
 
-## Example: Security Jokes with Continue Mode
+## Пример: шутки про безопасность в режиме продолжения
 
-Here's what happens when you run `cai --continue --prompt "tell me a joke about security"`:
+Вот что происходит, когда вы запускаете `cai --continue --prompt "tell me a joke about security"`:
 
 ```bash
 $ cai --continue --prompt "tell me a joke about security"
@@ -43,23 +42,23 @@ Agent: What's a hacker's favorite season?
 [Continues until interrupted with Ctrl+C]
 ```
 
-## How It Works
+## Как это работает
 
-### 1. Intelligent Context Analysis
+### 1. Интеллектуальный анализ контекста
 
-When an agent completes a turn, the continuation system analyzes:
-- **Original request**: The initial task or prompt from the user
-- **Conversation history**: Recent messages and responses
-- **Tool usage**: Which tools were used and their outputs
-- **Error states**: Any errors encountered and their types
-- **Task progress**: Current state of task completion
+Когда агент завершает ход, система продолжения анализирует:
+- **Исходный запрос**: первоначальную задачу или подсказку пользователя
+- **Историю беседы**: последние сообщения и ответы
+- **Использование инструментов**: какие инструменты были задействованы и их результаты
+- **Состояние ошибок**: любые встреченные ошибки и их типы
+- **Прогресс задачи**: текущую степень выполнения задачи
 
-### 2. AI-Powered Continuation Generation
+### 2. Генерация продолжения на базе ИИ
 
-The system uses the configured AI model (default: alias1) to generate contextual continuation prompts:
+Система использует настроенную модель ИИ (по умолчанию: alias1) для генерации контекстных подсказок продолжения:
 
 ```python
-# The system creates a detailed context summary
+# Система создаёт подробное резюме контекста
 context_summary = """
 ORIGINAL TASK: Tell me a joke about security
 CONVERSATION FLOW:
@@ -75,189 +74,189 @@ Generate a specific continuation prompt...
 """
 ```
 
-### 3. Smart Fallback System
+### 3. Умная система резервного продолжения
 
-When the AI model is unavailable, the system provides intelligent fallbacks based on context:
+Когда модель ИИ недоступна, система предоставляет интеллектуальные резервные варианты на основе контекста:
 
-| Scenario | Fallback Continuation |
+| Ситуация | Резервное продолжение |
 |----------|----------------------|
-| Security joke told | "Tell another cybersecurity joke or pun." |
-| File not found | "Search for the correct file path or create the missing resource." |
-| Search completed | "Examine the search results in detail and investigate the most relevant findings." |
-| Security analysis | "Analyze the code for security vulnerabilities like injection flaws or authentication issues." |
-| Permission denied | "Check permissions and try accessing the resource with appropriate credentials." |
+| Рассказывается шутка про безопасность | "Tell another cybersecurity joke or pun." |
+| Файл не найден | "Search for the correct file path or create the missing resource." |
+| Поиск завершён | "Examine the search results in detail and investigate the most relevant findings." |
+| Анализ безопасности | "Analyze the code for security vulnerabilities like injection flaws or authentication issues." |
+| Доступ запрещён | "Check permissions and try accessing the resource with appropriate credentials." |
 
-## Common Use Cases
+## Частые сценарии использования
 
-### 1. Automated Security Audits
+### 1. Автоматические проверки безопасности
 ```bash
 cai --continue --prompt "perform a security audit of the authentication system"
 ```
-The agent will:
-- Search for authentication-related files
-- Analyze code for vulnerabilities
-- Check for common security issues
-- Generate a comprehensive report
+Агент будет:
+- Искать файлы, связанные с аутентификацией
+- Анализировать код на наличие уязвимостей
+- Проверять распространённые проблемы безопасности
+- Формировать подробный отчёт
 
-### 2. Continuous Bug Hunting
+### 2. Непрерывный поиск багов
 ```bash
 cai --continue --prompt "find and document all XSS vulnerabilities"
 ```
-The agent will:
-- Search for user input handling code
-- Identify potential XSS vectors
-- Document findings
-- Suggest fixes
+Агент будет:
+- Искать код, обрабатывающий пользовательский ввод
+- Определять потенциальные XSS-векторы
+- Документировать находки
+- Предлагать исправления
 
-### 3. Extended Code Analysis
+### 3. Расширенный анализ кода
 ```bash
 cai --continue --prompt "analyze this codebase for OWASP Top 10 vulnerabilities"
 ```
-The agent will:
-- Systematically check for each vulnerability type
-- Provide detailed findings
-- Continue until all categories are covered
+Агент будет:
+- Системно проверять каждый тип уязвимости
+- Давать подробные результаты
+- Продолжать до покрытия всех категорий
 
-### 4. Entertainment Mode
+### 4. Развлекательный режим
 ```bash
 cai --continue --prompt "tell me cybersecurity jokes and fun facts"
 ```
-The agent will:
-- Tell jokes about security topics
-- Share interesting security facts
-- Continue entertaining until stopped
+Агент будет:
+- Рассказывать шутки по теме безопасности
+- Делить интересными фактами о безопасности
+- Продолжать развлекать до остановки
 
-## Configuration
+## Настройка
 
-### Environment Variables
+### Переменные окружения
 
 ```bash
-# Use a different model for continuation generation
+# Использовать другую модель для генерации продолжений
 export CAI_MODEL=gpt-4
 cai --continue --prompt "analyze this code"
 
-# Set a fallback model if primary fails
+# Указать запасную модель, если основная не сработает
 export CAI_CONTINUATION_FALLBACK_MODEL=gpt-3.5-turbo
 cai --continue --prompt "test application security"
 
-# Configure API keys for custom models
+# Настроить API-ключи для пользовательских моделей
 export ALIAS_API_KEY=your-api-key
 cai --continue --prompt "perform penetration testing"
 ```
 
-### Combining with Other CAI Features
+### Совместное использование с другими функциями CAI
 
 ```bash
-# Use specific agent with continue mode
+# Использовать конкретного агента с режимом continue
 CAI_AGENT_TYPE=bug_bounter_agent cai --continue --prompt "test example.com"
 
-# Set workspace for file operations
+# Установить рабочую область для операций с файлами
 CAI_WORKSPACE=project1 cai --continue --prompt "audit all Python files"
 
-# Enable streaming for real-time output
+# Включить потоковый вывод для реального времени
 CAI_STREAM=true cai --continue --prompt "monitor security events"
 ```
 
-## Advanced Features
+## Продвинутые функции
 
-### Continuation Decision Logic
+### Логика принятия решения о продолжении
 
-The system decides whether to continue based on:
-1. **Completion indicators**: Stops if agent says "completed", "finished", "done"
-2. **Active work detection**: Continues if tools are being used
-3. **Error recovery**: Attempts to resolve errors automatically
-4. **Task progress**: Evaluates if the original goal is achieved
+Система решает, продолжать ли работу, исходя из:
+1. **Индикаторов завершения**: останавливается, если агент говорит «completed», «finished», «done»
+2. **Обнаружения активной работы**: продолжает, если используются инструменты
+3. **Восстановления после ошибок**: пытается автоматически исправить ошибки
+4. **Прогресса задачи**: оценивает, достигнута ли исходная цель
 
-### Context-Aware Prompts
+### Контекстно-зависимые подсказки
 
-The continuation prompts adapt based on:
-- **Task type**: Security analysis, testing, code review, etc.
-- **Current state**: Errors, findings, progress
-- **Tool usage**: Different prompts for different tools
-- **Conversation flow**: Maintains coherent task progression
+Подсказки продолжения адаптируются в зависимости от:
+- **Типа задачи**: анализ безопасности, тестирование, ревью кода и т.д.
+- **Текущего состояния**: ошибки, находки, прогресс
+- **Использования инструментов**: разные подсказки для разных инструментов
+- **Потока разговора**: поддерживают логичное развитие задачи
 
-## Best Practices
+## Лучшие практики
 
-### 1. Clear Initial Prompts
+### 1. Чёткие начальные подсказки
 ```bash
-# Good - Specific and actionable
+# Хорошо — конкретно и действенно
 cai --continue --prompt "find SQL injection vulnerabilities in user.py"
 
-# Less effective - Too vague
+# Менее эффективно — слишком расплывчато
 cai --continue --prompt "check security"
 ```
 
-### 2. Monitor Progress
-- Check output periodically to ensure correct direction
-- Use Ctrl+C to stop if needed
-- Review logs for detailed execution history
+### 2. Отслеживайте прогресс
+- Проверяйте вывод периодически, чтобы убедиться, что направление верное
+- Используйте Ctrl+C, чтобы остановить при необходимости
+- Просматривайте логи для подробной истории выполнения
 
-### 3. Set Appropriate Limits
+### 3. Устанавливайте разумные лимиты
 ```python
-# In code integration, use max_turns
+# В коде используйте max_turns
 run_cai_cli(
     starting_agent=agent,
     initial_prompt="analyze security",
     continue_mode=True,
-    max_turns=10  # Limit to 10 turns
+    max_turns=10  # Ограничение до 10 ходов
 )
 ```
 
-### 4. Error Handling
-The system automatically:
-- Retries failed operations with different approaches
-- Searches for alternatives when files are missing
-- Adjusts strategies based on error types
+### 4. Обработка ошибок
+Система автоматически:
+- повторяет неудачные операции другими способами
+- ищет альтернативы, когда файлы отсутствуют
+- корректирует стратегию в зависимости от типа ошибки
 
-## Troubleshooting
+## Поиск и исправление проблем
 
-### Issue: Generic Continuation Messages
-**Symptom**: Always see "Continue working on the task based on your previous findings"
+### Проблема: общие сообщения продолжения
+**Симптом**: всегда появляется «Continue working on the task based on your previous findings»
 
-**Solution**: 
-- Check model configuration is correct
-- Ensure API keys are valid
-- Review debug logs for API errors
+**Решение**:
+- Проверьте, что конфигурация модели корректна
+- Убедитесь, что API-ключи действительны
+- Просмотрите отладочные логи на предмет ошибок API
 
-### Issue: Continuation Not Triggering
-**Symptom**: Agent stops after completing a task
+### Проблема: продолжение не запускается
+**Симптом**: агент останавливается после завершения задачи
 
-**Possible causes**:
-- Agent explicitly said task is "completed" or "done"
-- No recent tool usage detected
-- Error in continuation module
+**Возможные причины**:
+- агент явно сказал, что задача «completed» или «done»
+- не обнаружено недавнего использования инструментов
+- ошибка в модуле продолжения
 
-**Solution**:
-- Use more open-ended initial prompts
-- Check logs for completion indicators
-- Verify --continue flag is properly set
+**Решение**:
+- используйте более открытые начальные подсказки
+- проверьте логи на индикаторы завершения
+- убедитесь, что флаг --continue установлен правильно
 
-### Issue: Infinite Loops
-**Symptom**: Agent keeps doing the same thing
+### Проблема: бесконечные циклы
+**Симптом**: агент продолжает делать одно и то же
 
-**Solution**:
-- Set max_turns limit
-- Use more specific initial prompts
-- Interrupt with Ctrl+C and refine the task
+**Решение**:
+- задайте ограничение max_turns
+- используйте более конкретные начальные подсказки
+- прервите Ctrl+C и уточните задачу
 
-## Technical Implementation
+## Техническая реализация
 
-### Core Components
+### Основные компоненты
 
-1. **`src/cai/continuation.py`**: Main continuation logic
-   - `generate_continuation_advice()`: Creates AI-powered prompts
-   - `should_continue_automatically()`: Decides when to continue
+1. **`src/cai/continuation.py`**: основная логика продолжения
+   - `generate_continuation_advice()`: создаёт подсказки на базе ИИ
+   - `should_continue_automatically()`: решает, продолжать ли
 
-2. **`src/cai/cli.py`**: Integration point
-   - `--continue` flag handling
-   - Continuation loop implementation
+2. **`src/cai/cli.py`**: точка интеграции
+   - обработка флага `--continue`
+   - реализация цикла продолжения
 
-3. **Context Analysis**: 
-   - Extracts conversation history
-   - Identifies tool usage patterns
-   - Detects error conditions
+3. **Анализ контекста**:
+   - извлекает историю беседы
+   - определяет шаблоны использования инструментов
+   - обнаруживает условия ошибок
 
-### API Integration
+### Интеграция с API
 
 The continuation system uses LiteLLM for model calls:
 ```python

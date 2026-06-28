@@ -5,52 +5,52 @@
     Функция трассировки отключена, поскольку мы переписываем её, чтобы она соответствовала стандартам OpenTelemetry. Новая реализация будет доступна в будущем.
 
 
-The Agents SDK includes built-in tracing, collecting a comprehensive record of events during an agent run: LLM generations, tool calls, handoffs, guardrails, and even custom events that occur. Using the [Traces dashboard](https://platform.openai.com/traces), you can debug, visualize, and monitor your workflows during development and in production.
+SDK агентов включает встроенную трассировку, которая собирает полный журнал событий во время выполнения агента: генерации LLM, вызовы инструментов, handoff, guardrails и даже пользовательские события. С помощью [Traces dashboard](https://platform.openai.com/traces) вы можете отлаживать, визуализировать и мониторить рабочие процессы во время разработки и в продакшене.
 
 !!!note
 
-    Tracing is enabled by default. There are two ways to disable tracing:
+    Трассировка включена по умолчанию. Есть два способа отключить трассировку:
 
-    1. You can globally disable tracing by setting the env var `OPENAI_AGENTS_DISABLE_TRACING=1`
-    2. You can disable tracing for a single run by setting [`cai.sdk.agents.run.RunConfig.tracing_disabled`][] to `True`
+    1. Можно глобально отключить трассировку, установив переменную окружения `OPENAI_AGENTS_DISABLE_TRACING=1`
+    2. Можно отключить трассировку для одного запуска, установив [`cai.sdk.agents.run.RunConfig.tracing_disabled`][] в `True`
 
-***For organizations operating under a Zero Data Retention (ZDR) policy using OpenAI's APIs, tracing is unavailable.***
+***Для организаций, работающих в рамках политики Zero Data Retention (ZDR) с API OpenAI, трассировка недоступна.***
 
-## Traces and spans
+## Трейсы и спаны
 
--   **Traces** represent a single end-to-end operation of a "workflow". They're composed of Spans. Traces have the following properties:
-    -   `workflow_name`: This is the logical workflow or app. For example "Code generation" or "Customer service".
-    -   `trace_id`: A unique ID for the trace. Automatically generated if you don't pass one. Must have the format `trace_<32_alphanumeric>`.
-    -   `group_id`: Optional group ID, to link multiple traces from the same conversation. For example, you might use a chat thread ID.
-    -   `disabled`: If True, the trace will not be recorded.
-    -   `metadata`: Optional metadata for the trace.
--   **Spans** represent operations that have a start and end time. Spans have:
-    -   `started_at` and `ended_at` timestamps.
-    -   `trace_id`, to represent the trace they belong to
-    -   `parent_id`, which points to the parent Span of this Span (if any)
-    -   `span_data`, which is information about the Span. For example, `AgentSpanData` contains information about the Agent, `GenerationSpanData` contains information about the LLM generation, etc.
+-   **Трейсы** представляют собой одну сквозную операцию «workflow». Они состоят из спанов. Трейсы имеют следующие свойства:
+    -   `workflow_name`: логическое имя рабочего процесса или приложения. Например «Генерация кода» или «Служба поддержки».
+    -   `trace_id`: уникальный идентификатор трейса. Генерируется автоматически, если вы не передаёте его. Должен иметь формат `trace_<32_alphanumeric>`.
+    -   `group_id`: опциональный идентификатор группы, чтобы связать несколько трейсов из одной беседы. Например, можно использовать идентификатор чата.
+    -   `disabled`: если `True`, трейc не будет записан.
+    -   `metadata`: опциональные метаданные для трейса.
+-   **Спаны** представляют операции с началом и концом. У спанов есть:
+    -   метки времени `started_at` и `ended_at`.
+    -   `trace_id`, указывающий, к какому трейсу они принадлежат.
+    -   `parent_id`, указывающий на родительский спан (если есть).
+    -   `span_data`, содержащие информацию о спане. Например, `AgentSpanData` хранит данные агента, `GenerationSpanData` хранит данные генерации LLM и т.д.
 
-## Default tracing
+## Трассировка по умолчанию
 
-By default, the SDK traces the following:
+По умолчанию SDK трассирует следующие события:
 
--   The entire `Runner.{run, run_sync, run_streamed}()` is wrapped in a `trace()`.
--   Each time an agent runs, it is wrapped in `agent_span()`
--   LLM generations are wrapped in `generation_span()`
--   Function tool calls are each wrapped in `function_span()`
--   Guardrails are wrapped in `guardrail_span()`
--   Handoffs are wrapped in `handoff_span()`
--   Audio inputs (speech-to-text) are wrapped in a `transcription_span()`
--   Audio outputs (text-to-speech) are wrapped in a `speech_span()`
--   Related audio spans may be parented under a `speech_group_span()`
+-   Весь `Runner.{run, run_sync, run_streamed}()` оборачивается в `trace()`.
+-   Каждый запуск агента оборачивается в `agent_span()`.
+-   Генерации LLM оборачиваются в `generation_span()`.
+-   Вызовы function tools оборачиваются в `function_span()`.
+-   Guardrails оборачиваются в `guardrail_span()`.
+-   Handoffs оборачиваются в `handoff_span()`.
+-   Аудиовход (speech-to-text) оборачивается в `transcription_span()`.
+-   Аудиовыход (text-to-speech) оборачивается в `speech_span()`.
+-   Связанные аудиоспаны могут быть вложены в `speech_group_span()`.
 
-By default, the trace is named "Agent trace". You can set this name if you use `trace`, or you can can configure the name and other properties with the [`RunConfig`][cai.sdk.agents.run.RunConfig].
+По умолчанию трейс называется «Agent trace». Вы можете задать это имя через `trace`, либо настроить имя и другие свойства с помощью [`RunConfig`][cai.sdk.agents.run.RunConfig].
 
-In addition, you can set up [custom trace processors](#custom-tracing-processors) to push traces to other destinations (as a replacement, or secondary destination).
+Кроме того, вы можете настроить [пользовательские процессоры трассировки](#custom-tracing-processors), чтобы отправлять трейсы в другие места назначения (в качестве замены или дополнительной цели).
 
-## Higher level traces
+## Трейсы более высокого уровня
 
-Sometimes, you might want multiple calls to `run()` to be part of a single trace. You can do this by wrapping the entire code in a `trace()`.
+Иногда вы хотите, чтобы несколько вызовов `run()` были частью одного трейса. Это можно сделать, обернув весь код в `trace()`.
 
 ```python
 from cai.sdk.agents import Agent, Runner, trace
@@ -65,44 +65,44 @@ async def main():
         print(f"Rating: {second_result.final_output}")
 ```
 
-1. Because the two calls to `Runner.run` are wrapped in a `with trace()`, the individual runs will be part of the overall trace rather than creating two traces.
+1. Поскольку два вызова `Runner.run` обёрнуты в `with trace()`, отдельные запуски будут частью общего трейса, а не создадут два отдельных трейса.
 
-## Creating traces
+## Создание трейсов
 
-You can use the [`trace()`][cai.sdk.agents.tracing.trace] function to create a trace. Traces need to be started and finished. You have two options to do so:
+Вы можете использовать функцию [`trace()`][cai.sdk.agents.tracing.trace] для создания трейса. Трейсы нужно начинать и завершать. Есть два способа сделать это:
 
-1. **Recommended**: use the trace as a context manager, i.e. `with trace(...) as my_trace`. This will automatically start and end the trace at the right time.
-2. You can also manually call [`trace.start()`][cai.sdk.agents.tracing.Trace.start] and [`trace.finish()`][cai.sdk.agents.tracing.Trace.finish].
+1. **Рекомендуется**: использовать трейc как менеджер контекста, т.е. `with trace(...) as my_trace`. Это автоматически запустит и завершит трейс в правильное время.
+2. Также можно вручную вызвать [`trace.start()`][cai.sdk.agents.tracing.Trace.start] и [`trace.finish()`][cai.sdk.agents.tracing.Trace.finish].
 
-The current trace is tracked via a Python [`contextvar`](https://docs.python.org/3/library/contextvars.html). This means that it works with concurrency automatically. If you manually start/end a trace, you'll need to pass `mark_as_current` and `reset_current` to `start()`/`finish()` to update the current trace.
+Текущий трейс отслеживается через Python [`contextvar`](https://docs.python.org/3/library/contextvars.html). Это означает, что он автоматически работает с конкурентностью. Если вы вручную стартуете/завершаете трейс, вам нужно передать `mark_as_current` и `reset_current` в `start()`/`finish()`, чтобы обновить текущий трейс.
 
-## Creating spans
+## Создание спанов
 
-You can use the various [`*_span()`][cai.sdk.agents.tracing.create] methods to create a span. In general, you don't need to manually create spans. A [`custom_span()`][cai.sdk.agents.tracing.custom_span] function is available for tracking custom span information.
+Вы можете использовать различные методы [`*_span()`][cai.sdk.agents.tracing.create] для создания спана. В общем случае вам не нужно создавать спаны вручную. Доступна функция [`custom_span()`][cai.sdk.agents.tracing.custom_span] для отслеживания пользовательской информации о спане.
 
-Spans are automatically part of the current trace, and are nested under the nearest current span, which is tracked via a Python [`contextvar`](https://docs.python.org/3/library/contextvars.html).
+Спаны автоматически становятся частью текущего трейса и вкладываются в ближайший текущий спан, который отслеживается через Python [`contextvar`](https://docs.python.org/3/library/contextvars.html).
 
-## Sensitive data
+## Конфиденциальные данные
 
-Certain spans may capture potentially sensitive data.
+Некоторые спаны могут содержать потенциально конфиденциальные данные.
 
-The `generation_span()` stores the inputs/outputs of the LLM generation, and `function_span()` stores the inputs/outputs of function calls. These may contain sensitive data, so you can disable capturing that data via [`RunConfig.trace_include_sensitive_data`][cai.sdk.agents.run.RunConfig.trace_include_sensitive_data].
+`generation_span()` сохраняет входные и выходные данные генерации LLM, а `function_span()` сохраняет входные и выходные данные вызовов функций. Они могут содержать конфиденциальную информацию, поэтому вы можете отключить захват этих данных через [`RunConfig.trace_include_sensitive_data`][cai.sdk.agents.run.RunConfig.trace_include_sensitive_data].
 
-Similarly, Audio spans include base64-encoded PCM data for input and output audio by default. You can disable capturing this audio data by configuring [`VoicePipelineConfig.trace_include_sensitive_audio_data`][cai.sdk.agents.voice.pipeline_config.VoicePipelineConfig.trace_include_sensitive_audio_data].
+Аналогично, аудиоспаны по умолчанию включают в себя PCM-данные в base64 для входного и выходного аудио. Вы можете отключить захват этих аудиоданных, настроив [`VoicePipelineConfig.trace_include_sensitive_audio_data`][cai.sdk.agents.voice.pipeline_config.VoicePipelineConfig.trace_include_sensitive_audio_data].
 
-## Custom tracing processors
+## Пользовательские процессоры трассировки
 
-The high level architecture for tracing is:
+Высокоуровневая архитектура трассировки:
 
--   At initialization, we create a global [`TraceProvider`][cai.sdk.agents.tracing.setup.TraceProvider], which is responsible for creating traces.
--   We configure the `TraceProvider` with a [`BatchTraceProcessor`][cai.sdk.agents.tracing.processors.BatchTraceProcessor] that sends traces/spans in batches to a [`BackendSpanExporter`][cai.sdk.agents.tracing.processors.BackendSpanExporter], which exports the spans and traces to the OpenAI backend in batches.
+-   При инициализации создаётся глобальный [`TraceProvider`][cai.sdk.agents.tracing.setup.TraceProvider], который отвечает за создание трейсов.
+-   Мы настраиваем `TraceProvider` с помощью [`BatchTraceProcessor`][cai.sdk.agents.tracing.processors.BatchTraceProcessor], который отправляет трейсы/спаны пакетами в [`BackendSpanExporter`][cai.sdk.agents.tracing.processors.BackendSpanExporter], экспортирующий спаны и трейсы в OpenAI backend.
 
-To customize this default setup, to send traces to alternative or additional backends or modifying exporter behavior, you have two options:
+Чтобы настроить эту дефолтную конфигурацию, отправлять трейсы в альтернативные или дополнительные бекенды или изменять поведение экспорта, у вас есть два варианта:
 
-1. [`add_trace_processor()`][cai.sdk.agents.tracing.add_trace_processor] lets you add an **additional** trace processor that will receive traces and spans as they are ready. This lets you do your own processing in addition to sending traces to OpenAI's backend.
-2. [`set_trace_processors()`][cai.sdk.agents.tracing.set_trace_processors] lets you **replace** the default processors with your own trace processors. This means traces will not be sent to the OpenAI backend unless you include a `TracingProcessor` that does so.
+1. [`add_trace_processor()`][cai.sdk.agents.tracing.add_trace_processor] позволяет добавить **дополнительный** процессор трассировки, который будет получать трейсы и спаны по мере их готовности. Это позволяет вам выполнять собственную обработку помимо отправки трейсов на OpenAI backend.
+2. [`set_trace_processors()`][cai.sdk.agents.tracing.set_trace_processors] позволяет **заменить** стандартные процессоры своими собственными. Это значит, что трейсы не будут отправляться на OpenAI backend, если вы не включите `TracingProcessor`, который это делает.
 
-## External tracing processors list
+## Список внешних процессоров трассировки
 
 -   [Weights & Biases](https://weave-docs.wandb.ai/guides/integrations/openai_agents)
 -   [Arize-Phoenix](https://docs.arize.com/phoenix/tracing/integrations-tracing/openai-agents-sdk)

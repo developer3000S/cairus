@@ -1,21 +1,21 @@
 # Models
 
-The Agents SDK comes with out-of-the-box support for OpenAI models in two flavors:
+SDK агентов поддерживает OpenAI-модели двумя способами:
 
--   **Recommended**: the [`OpenAIResponsesModel`][cai.sdk.agents.models.openai_responses.OpenAIResponsesModel], which calls OpenAI APIs using the new [Responses API](https://platform.openai.com/docs/api-reference/responses).
--   The [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel], which calls OpenAI APIs using the [Chat Completions API](https://platform.openai.com/docs/api-reference/chat).
+-   **Рекомендуемый**: [`OpenAIResponsesModel`][cai.sdk.agents.models.openai_responses.OpenAIResponsesModel], который вызывает OpenAI API через новый [Responses API](https://platform.openai.com/docs/api-reference/responses).
+-   [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel], который вызывает OpenAI API через [Chat Completions API](https://platform.openai.com/docs/api-reference/chat).
 
-## Mixing and matching models
+## Смешивание и сочетание моделей
 
-Within a single workflow, you may want to use different models for each agent. For example, you could use a smaller, faster model for triage, while using a larger, more capable model for complex tasks. When configuring an [`Agent`][cai.sdk.agents.Agent], you can select a specific model by either:
+В одном рабочем процессе вы можете захотеть использовать разные модели для разных агентов. Например, можно взять меньшую, более быструю модель для триажа и большую, более мощную модель для сложных задач. При настройке [`Agent`][cai.sdk.agents.Agent] вы можете выбрать конкретную модель одним из способов:
 
-1. Passing the name of an OpenAI model.
-2. Passing any model name + a [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider] that can map that name to a Model instance.
-3. Directly providing a [`Model`][cai.sdk.agents.models.interface.Model] implementation.
+1. Передать имя модели OpenAI.
+2. Передать любое имя модели + [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider], который может сопоставить это имя с экземпляром Model.
+3. Напрямую передать реализацию [`Model`][cai.sdk.agents.models.interface.Model].
 
 !!!note
 
-    While our SDK supports both the [`OpenAIResponsesModel`][cai.sdk.agents.models.openai_responses.OpenAIResponsesModel] and the [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel] shapes, we recommend using a single model shape for each workflow because the two shapes support a different set of features and tools. If your workflow requires mixing and matching model shapes, make sure that all the features you're using are available on both.
+    Хотя наш SDK поддерживает формы [`OpenAIResponsesModel`][cai.sdk.agents.models.openai_responses.OpenAIResponsesModel] и [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel], мы рекомендуем использовать один тип модели для каждого рабочего процесса, потому что эти формы поддерживают разные наборы функций и инструментов. Если вашему рабочему процессу требуется смешивание форм моделей, убедитесь, что все используемые функции поддерживаются обоими.
 
 ```python
 from cai.sdk.agents import Agent, Runner, AsyncOpenAI, OpenAIChatCompletionsModel
@@ -48,46 +48,46 @@ async def main():
     print(result.final_output)
 ```
 
-1.  Sets the name of an OpenAI model directly.
-2.  Provides a [`Model`][cai.sdk.agents.models.interface.Model] implementation.
+1.  Указывает имя модели OpenAI напрямую.
+2.  Передает реализацию [`Model`][cai.sdk.agents.models.interface.Model].
 
-## Using other LLM providers
+## Использование других провайдеров LLM
 
-You can use other LLM providers in 3 ways (examples [here](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/)):
+Вы можете использовать других провайдеров LLM тремя способами (примеры [здесь](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/)):
 
-1. [`set_default_openai_client`][cai.sdk.agents.set_default_openai_client] is useful in cases where you want to globally use an instance of `AsyncOpenAI` as the LLM client. This is for cases where the LLM provider has an OpenAI compatible API endpoint, and you can set the `base_url` and `api_key`. See a configurable example in [examples/model_providers/custom_example_global.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_global.py).
-2. [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider] is at the `Runner.run` level. This lets you say "use a custom model provider for all agents in this run". See a configurable example in [examples/model_providers/custom_example_provider.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_provider.py).
-3. [`Agent.model`][cai.sdk.agents.agent.Agent.model] lets you specify the model on a specific Agent instance. This enables you to mix and match different providers for different agents. See a configurable example in [examples/model_providers/custom_example_agent.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_agent.py).
+1. [`set_default_openai_client`][cai.sdk.agents.set_default_openai_client] полезен, если вы хотите глобально использовать экземпляр `AsyncOpenAI` в качестве клиента LLM. Это работает в случаях, когда провайдер LLM имеет совместимый с OpenAI API endpoint, и вы можете задать `base_url` и `api_key`. Смотрите настраиваемый пример в [examples/model_providers/custom_example_global.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_global.py).
+2. [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider] работает на уровне `Runner.run`. Это позволяет сказать «использовать пользовательский провайдер моделей для всех агентов в этом запуске». Смотрите настраиваемый пример в [examples/model_providers/custom_example_provider.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_provider.py).
+3. [`Agent.model`][cai.sdk.agents.agent.Agent.model] позволяет указать модель на конкретном экземпляре агента. Это позволяет смешивать и сочетать разных провайдеров для разных агентов. Смотрите пример в [examples/model_providers/custom_example_agent.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_agent.py).
 
-In cases where you do not have an API key from `platform.openai.com`, we recommend disabling tracing via `set_tracing_disabled()`, or setting up a [different tracing processor](tracing.md).
+Если у вас нет ключа API от `platform.openai.com`, мы рекомендуем отключить трассировку с помощью `set_tracing_disabled()` или настроить [другой процессор трассировки](tracing.md).
 
 !!! note
 
-    In these examples, we use the Chat Completions API/model, because most LLM providers don't yet support the Responses API. If your LLM provider does support it, we recommend using Responses.
+    В этих примерах мы используем API/модель Chat Completions, потому что большинство других провайдеров LLM пока не поддерживают Responses API. Если ваш провайдер поддерживает Responses, мы рекомендуем использовать его.
 
-## Common issues with using other LLM providers
+## Распространённые проблемы при использовании других провайдеров LLM
 
-### Tracing client error 401
+### Ошибка клиента трассировки 401
 
-If you get errors related to tracing, this is because traces are uploaded to OpenAI servers, and you don't have an OpenAI API key. You have three options to resolve this:
+Если вы получаете ошибки, связанные с трассировкой, это означает, что трассы выгружаются на серверы OpenAI, а у вас нет ключа OpenAI API. У вас есть три варианта решения:
 
-1. Disable tracing entirely: [`set_tracing_disabled(True)`][cai.sdk.agents.set_tracing_disabled].
-2. Set an OpenAI key for tracing: [`set_tracing_export_api_key(...)`][cai.sdk.agents.set_tracing_export_api_key]. This API key will only be used for uploading traces, and must be from [platform.openai.com](https://platform.openai.com/).
-3. Use a non-OpenAI trace processor. See the [tracing docs](tracing.md#custom-tracing-processors).
+1. Отключить трассировку полностью: [`set_tracing_disabled(True)`][cai.sdk.agents.set_tracing_disabled].
+2. Установить ключ OpenAI для трассировки: [`set_tracing_export_api_key(...)`][cai.sdk.agents.set_tracing_export_api_key]. Этот ключ API будет использоваться только для загрузки трасс, и он должен быть из [platform.openai.com](https://platform.openai.com/).
+3. Использовать процессор трассировки, не зависящий от OpenAI. Смотрите [документацию по трассировке](tracing.md#custom-tracing-processors).
 
-### Responses API support
+### Поддержка Responses API
 
-The SDK uses the Responses API by default, but most other LLM providers don't yet support it. You may see 404s or similar issues as a result. To resolve, you have two options:
+SDK использует Responses API по умолчанию, но большинство других провайдеров LLM ещё не поддерживают его. В результате вы можете получить 404 или похожую ошибку. Чтобы решить проблему, у вас есть два варианта:
 
-1. Call [`set_default_openai_api("chat_completions")`][cai.sdk.agents.set_default_openai_api]. This works if you are setting `OPENAI_API_KEY` and `OPENAI_BASE_URL` via environment vars.
-2. Use [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel]. There are examples [here](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/).
+1. Вызвать [`set_default_openai_api("chat_completions")`][cai.sdk.agents.set_default_openai_api]. Это работает, если вы задаёте `OPENAI_API_KEY` и `OPENAI_BASE_URL` через переменные окружения.
+2. Использовать [`OpenAIChatCompletionsModel`][cai.sdk.agents.models.openai_chatcompletions.OpenAIChatCompletionsModel]. Примеры есть [здесь](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/).
 
-### Structured outputs support
+### Поддержка структурированных выводов
 
-Some model providers don't have support for [structured outputs](https://platform.openai.com/docs/guides/structured-outputs). This sometimes results in an error that looks something like this:
+Некоторые провайдеры моделей не поддерживают [структурированные выводы](https://platform.openai.com/docs/guides/structured-outputs). Это иногда приводит к ошибке вида:
 
 ```
 BadRequestError: Error code: 400 - {'error': {'message': "'response_format.type' : value is not one of the allowed values ['text','json_object']", 'type': 'invalid_request_error'}}
 ```
 
-This is a shortcoming of some model providers - they support JSON outputs, but don't allow you to specify the `json_schema` to use for the output. We are working on a fix for this, but we suggest relying on providers that do have support for JSON schema output, because otherwise your app will often break because of malformed JSON.
+Это ограничение некоторых провайдеров — они поддерживают JSON-вывод, но не позволяют задавать `json_schema` для вывода. Мы работаем над исправлением этой проблемы, но рекомендуем полагаться на провайдеров, которые поддерживают JSON-схему, иначе ваше приложение может часто ломаться из-за некорректного JSON.
