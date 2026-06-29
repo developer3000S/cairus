@@ -1,156 +1,123 @@
-# Session Resume
+# Возобновление сессии
 
-## Overview
+## Обзор
 
-CAI provides powerful session resume capabilities that allow you to continue where you left off. Whether you were in the middle of a security audit, bug bounty session, or complex analysis, you can seamlessly restore your conversation history and pick up exactly where you stopped.
+CAI предоставляет мощные возможности возобновления сессии, которые позволяют вам продолжить с того места, где вы остановились. Были ли вы посередине проверки безопасности, сессии охоты за багами или сложного анализа, вы можете плавно восстановить историю беседы и продолжить точно с того места, где вы остановились.
 
-The session resume system automatically saves all your interactions to JSONL log files and provides multiple ways to restore them:
+Система возобновления сессии автоматически сохраняет все ваши взаимодействия в логи JSONL и предоставляет несколько способов их восстановления:
 
-- **`--resume`**: Resume from specific session or interactive selector
-- **`--resume --continue`**: Resume AND continue autonomously
-- **Interactive Selector**: Visual session browser with pagination
+- **`--resume`**: возобновить из конкретной сессии или интерактивного селектора
+- **`--resume --continue`**: возобновить И продолжить автономно
+- **Интерактивный селектор**: визуальный браузер сессий с постраничностью
 
-## Quick Start
+## Быстрый старт
 
 ```bash
-# Resume the last session
+# Возобновить последнюю сессию
 cai --resume
 
-# Resume the last session and continue autonomously
+# Возобновить последнюю сессию и продолжить автономно
 cai --resume --continue
 
-# Interactive session selector
+# Интерактивный селектор сессий
 cai --resume list
 
-# Resume a specific session by ID
+# Возобновить конкретную сессию по ID
 cai --resume abc12345
 
-# Resume from a specific log file
+# Возобновить из конкретного файла логов
 cai --resume /path/to/session.jsonl
 ```
 
-## Session Resume Options
+## Опции возобновления сессии
 
-### Resume Last Session
+### Возобновить последнюю сессию
 
 ```bash
 cai --resume
-# or
+# или
 cai --resume last
 ```
 
-This automatically finds and loads the most recent session that contains messages. Empty sessions are skipped.
+Автоматически находит и загружает самую свежую сессию, которая содержит сообщения. Пустые сессии пропускаются.
 
-### Interactive Session Selector
+### Интерактивный селектор сессий
 
 ```bash
 cai --resume list
 ```
 
-Opens an interactive menu with:
+Открывает интерактивное меню с:
 
-- **Arrow key navigation** (`↑`/`↓` or `j`/`k`)
-- **Page navigation** (`←`/`→` or `h`/`l`)
-- **Session preview** showing last assistant response
-- **Cost and token tracking** per session
-- **Model information** for each session
+- **Навигацией стрелками** (`↑`/`↓` или `j`/`k`)
+- **Навигацией по страницам** (`←`/`→` или `h`/`l`)
+- **Предпросмотром сессии**, показывающим последний ответ ассистента
+- **Отслеживанием стоимости и токенов** по сессии
+- **Информацией о модели** для каждой сессии
 
-```
-╭──────────────────────────────────────────────────────────────────────────────╮
-│  ↻ Select a session to resume                                                │
-│  ↑/↓/j/k navigate  │  ←/→/h/l pages  │  Enter select  │  q/Esc cancel       │
-╰──────────────────────────────────────────────────────────────────────────────╯
-
-   Page 1+ │ 10 sessions │ → next
-
-   ID       │ Date       │ Model        │ Msgs    │ Cost
-   ─────────┼────────────┼──────────────┼─────────┼────────
- ❯ abc12345 │ 01-12 15:30 │ claude-sonnet │  42 msgs │   $2.35 ★ LATEST
-   def67890 │ 01-12 14:15 │ gpt-4         │  28 msgs │   $1.80
-   ghi11223 │ 01-11 20:00 │ claude-opus   │ 156 msgs │  $12.50
-
-   ──────────────────────────────────────────────────────────────────
-   Preview:
-   The vulnerability analysis is complete. I found 3 critical issues:
-   1. SQL injection in user.py line 45...
-```
-
-### Resume with Continue Mode
+### Возобновить с режимом продолжения
 
 ```bash
 cai --resume --continue
-# or
+# или
 cai --resume -c
 ```
 
-This powerful combination:
-1. **Restores your previous session** with full conversation history
-2. **Automatically generates a continuation prompt** based on context
-3. **Continues working autonomously** without waiting for user input
+Это мощное сочетание:
+1. **Восстанавливает вашу предыдущую сессию** с полной историей беседы
+2. **Автоматически генерирует подсказку продолжения** на основе контекста
+3. **Продолжает работать автономно** без ожидания ввода пользователя
 
-Perfect for:
-- Resuming long-running security audits
-- Continuing interrupted penetration tests
-- Picking up complex analysis tasks
+Идеально для:
+- Возобновления долгих проверок безопасности
+- Продолжения прерванных пентестов
+- Подхвата сложных задач анализа
 
-### Resume Specific Session
+### Возобновить конкретную сессию
 
 ```bash
-# By session ID (first 8 characters)
+# По ID сессии (первые 8 символов)
 cai --resume abc12345
 
-# By full log file path
+# По полному пути файла логов
 cai --resume logs/cai_20240112_153045.jsonl
 
-# From custom logs directory
+# Из пользовательского каталога логов
 cai --resume my_session --logpath ~/custom_logs/
 ```
 
-## What Gets Restored
+## Что восстанавливается
 
-When you resume a session, CAI restores:
+Когда вы возобновляете сессию, CAI восстанавливает:
 
-| Component | Description |
-|-----------|-------------|
-| **Message History** | All user messages and agent responses |
-| **Tool Calls** | Complete record of tools used and their outputs |
-| **Agent Context** | The agent's understanding of the task |
-| **Session Statistics** | Total cost, tokens used, active time |
-| **Parallel Agent Config** | Multi-agent configurations (if applicable) |
+| Компонент | Описание |
+|-----------|---------|
+| **История сообщений** | Все сообщения пользователя и ответы агента |
+| **Вызовы инструментов** | Полный список используемых инструментов и их результатов |
+| **Контекст агента** | Понимание агентом задачи |
+| **Статистика сессии** | Общая стоимость, использованные токены, активное время |
+| **Конфигурация параллельного агента** | Конфигурации многоагентных систем (если применимо) |
 
-### Session Statistics Display
+## Пользовательский каталог логов
 
-```
-↻ Resuming session
-claude-sonnet │ Tokens: 45,230in/12,450out │ $3.45 │ 25.3s active
-
-[Session content displayed here...]
-
-Session restored. Continue where you left off.
-Restored session stats: $3.4500, 45230in/12450out tokens
-Loaded 156 messages into agent history
-```
-
-## Custom Logs Directory
-
-Use `--logpath` to work with sessions stored in custom directories:
+Используйте `--logpath` для работы с сессиями, хранящимися в пользовательских каталогах:
 
 ```bash
-# Resume from custom directory
+# Возобновить из пользовательского каталога
 cai --resume list --logpath ~/projects/security_audits/logs/
 
-# Resume last session from custom directory
+# Возобновить последнюю сессию из пользовательского каталога
 cai --resume --logpath /shared/team_sessions/
 ```
 
-The `--logpath` option:
-- Recursively searches all subdirectories for `.jsonl` files
-- Works with both `--resume list` and `--resume last`
-- Supports absolute and relative paths
+Опция `--logpath`:
+- Рекурсивно ищет все подкаталоги для файлов `.jsonl`
+- Работает как с `--resume list`, так и с `--resume last`
+- Поддерживает абсолютные и относительные пути
 
-## Parallel Agent Sessions
+## Параллельные сессии агентов
 
-When resuming a session that used multiple parallel agents, CAI automatically detects and offers to restore the parallel configuration:
+Когда вы возобновляете сессию, которая использовала несколько параллельных агентов, CAI автоматически обнаруживает и предлагает восстановить конфигурацию параллельных агентов:
 
 ```
 The session used 3 parallel agents:
@@ -161,38 +128,38 @@ The session used 3 parallel agents:
 Set up the same parallel agent configuration? (y/n):
 ```
 
-If you choose yes, the parallel agent configuration is restored and you can continue working with the same multi-agent setup.
+Если вы выберете да, конфигурация параллельных агентов восстанавливается и вы можете продолжить работу с той же многоагентной установкой.
 
-## Session Log Format
+## Формат журналов сессии
 
-Sessions are stored as JSONL (JSON Lines) files in the `logs/` directory:
+Сессии хранятся как файлы JSONL (JSON Lines) в каталоге `logs/`:
 
 ```
 logs/
-├── last -> cai_20240112_153045.jsonl  # Symlink to most recent
+├── last -> cai_20240112_153045.jsonl  # Symlink к самому свежему
 ├── cai_20240112_153045.jsonl
 ├── cai_20240112_140000.jsonl
 └── cai_20240111_200000.jsonl
 ```
 
-Each log file contains:
-- Session metadata (ID, timestamps, model info)
-- Complete message history
-- Tool calls and responses
-- Token usage and cost tracking
-- Timing metrics (active/idle time)
+Каждый файл логов содержит:
+- Метаданные сессии (ID, метки времени, информацию о модели)
+- Полную историю сообщений
+- Вызовы инструментов и их ответы
+- Отслеживание использования токенов и стоимости
+- Метрики времени (активное/неактивное время)
 
-## Environment Variables
+## Переменные окружения
 
 ```bash
-# Custom default logs directory
+# Пользовательский каталог логов по умолчанию
 export CAI_LOGS_DIR=~/my_logs
 
-# Enable debug output for resume operations
+# Включить отладочный вывод для операций возобновления
 export CAI_DEBUG=2
 ```
 
-## Programmatic Usage
+## Программное использование
 
 ### Python API
 
@@ -204,17 +171,17 @@ from cai.repl.session_resume import (
     load_session_into_agent
 )
 
-# Find and display session
+# Найти и отобразить сессию
 log_path = find_last_session_log()
 messages, used_path, parallel_agents = resume_session(log_path)
 
-# Load into agent
+# Загрузить в агент
 from cai.agents import get_agent_by_name
 agent = get_agent_by_name("ctf_agent")
 load_session_into_agent(agent, messages, log_path=used_path)
 ```
 
-### List Recent Sessions
+### Список недавних сессий
 
 ```python
 from cai.repl.session_resume import list_recent_sessions
@@ -224,115 +191,91 @@ for session in sessions:
     print(f"{session['session_id'][:8]} - {session['model']} - ${session['total_cost']:.2f}")
 ```
 
-## Best Practices
+## Лучшие практики
 
-### 1. Regular Session Checkpoints
+### 1. Регулярные контрольные точки сессии
 
-For long-running tasks, the session is automatically saved after each interaction. You can safely interrupt with `Ctrl+C` and resume later.
+Для долгих задач сессия автоматически сохраняется после каждого взаимодействия. Вы можете безопасно прервать нажатием `Ctrl+C` и возобновить позже.
 
-### 2. Descriptive Initial Prompts
+### 2. Описательные начальные подсказки
 
-When starting a session you plan to resume later, use descriptive prompts that provide context:
+Когда вы запускаете сессию, которую планируете возобновить позже, используйте описательные подсказки, которые предоставляют контекст:
 
 ```bash
-# Good - Clear context for resumption
+# Хорошо — чёткий контекст для возобновления
 cai --prompt "Security audit of user authentication in project X, focusing on SQL injection and XSS"
 
-# Less helpful for resumption
+# Менее полезно для возобновления
 cai --prompt "check auth"
 ```
 
-### 3. Use Resume + Continue for Autonomous Work
+### 3. Используйте возобновление + продолжение для автономной работы
 
 ```bash
-# Start a long task
+# Запустить долгую задачу
 cai --continue --prompt "comprehensive security audit of the entire codebase"
 
-# Later, resume and let it continue working
+# Позже возобновить и позволить ей продолжить работу
 cai --resume --continue
 ```
 
-### 4. Organize Sessions with Custom Paths
+### 4. Организуйте сессии с пользовательскими путями
 
 ```bash
-# Keep different projects separate
+# Храните разные проекты отдельно
 cai --prompt "audit project A" --logpath ~/logs/project_a/
 cai --prompt "audit project B" --logpath ~/logs/project_b/
 
-# Resume specific project
+# Возобновите конкретный проект
 cai --resume --logpath ~/logs/project_a/
 ```
 
-## Troubleshooting
+## Поиск и исправление проблем
 
-### Issue: "No previous session found"
+### Проблема: "No previous session found"
 
-**Cause**: No valid session logs exist in the logs directory.
+**Причина**: Нет корректных журналов сессии в каталоге логов.
 
-**Solutions**:
-- Check the `logs/` directory exists and contains `.jsonl` files
-- Use `--logpath` to specify a custom directory
-- Ensure previous sessions completed at least one interaction
+**Решения**:
+- Проверьте, существует ли каталог `logs/` и содержит ли он файлы `.jsonl`
+- Используйте `--logpath` для указания пользовательского каталога
+- Убедитесь, что предыдущие сессии завершили как минимум одно взаимодействие
 
-### Issue: Session loads but context seems lost
+### Проблема: сессия загружается, но контекст кажется потерянным
 
-**Cause**: The model's context window may be exceeded.
+**Причина**: окно контекста модели может быть превышено.
 
-**Solutions**:
-- Resume with a model that has a larger context window
-- The session will work but older messages may be truncated by the model
+**Решения**:
+- Возобновите с моделью, которая имеет большее окно контекста
+- Сессия будет работать, но старые сообщения могут быть обрезаны моделью
 
-### Issue: Parallel agents not detected
+### Проблема: параллельные агенты не обнаружены
 
-**Cause**: The original session may not have used the parallel agent format.
+**Причина**: оригинальная сессия может не использовать формат параллельных агентов.
 
-**Solutions**:
-- Manually configure parallel agents with `/parallel` command after resuming
-- Check that the original session used proper parallel agent configuration
+**Решения**:
+- Вручную настройте параллельных агентов командой `/parallel` после возобновления
+- Проверьте, что оригинальная сессия использовала правильную конфигурацию параллельных агентов
 
-### Issue: Cost tracking shows $0.00 after resume
+### Проблема: отслеживание стоимости показывает $0.00 после возобновления
 
-**Cause**: Session stats couldn't be restored from the log file.
+**Причина**: статистику сессии не удалось восстановить из файла логов.
 
-**Solutions**:
-- This is cosmetic; the actual costs are still in the log file
-- Check log file format is valid JSONL
+**Решения**:
+- Это косметическое; фактические расходы всё ещё в файле логов
+- Проверьте, что формат файла логов является корректным JSONL
 
-## Technical Details
+## Технические детали
 
-### Session Resume Flow
+### Основные компоненты
 
-```mermaid
-graph TD
-    A[cai --resume] --> B{Resume type?}
-    B -->|last| C[Find last session log]
-    B -->|list| D[Interactive selector]
-    B -->|path/id| E[Find specific session]
+| Файл | Назначение |
+|------|----------|
+| `src/cai/repl/session_resume.py` | Основная функциональность возобновления |
+| `src/cai/sdk/agents/run_to_jsonl.py` | Парсинг JSONL и статистика токенов |
+| `src/cai/cli.py` | Интеграция CLI и обработка `--resume` |
 
-    C --> F[Load messages from JSONL]
-    D --> F
-    E --> F
-
-    F --> G[Display session content]
-    G --> H[Restore session stats]
-    H --> I[Load into agent history]
-
-    I --> J{--continue flag?}
-    J -->|Yes| K[Generate continuation prompt]
-    J -->|No| L[Wait for user input]
-
-    K --> M[Auto-continue working]
-```
-
-### Core Components
-
-| File | Purpose |
-|------|---------|
-| `src/cai/repl/session_resume.py` | Main resume functionality |
-| `src/cai/sdk/agents/run_to_jsonl.py` | JSONL parsing and token stats |
-| `src/cai/cli.py` | CLI integration and `--resume` handling |
-
-### Log File Structure
+### Структура файла логов
 
 ```json
 {"event": "session_start", "session_id": "abc12345", "timestamp": "2024-01-12T15:30:45Z"}
@@ -341,15 +284,15 @@ graph TD
 {"event": "session_end", "cost": {"total_cost": 3.45}, "timing_metrics": {...}}
 ```
 
-## Summary
+## Итог
 
-Session resume in CAI provides:
+Возобновление сессии в CAI предоставляет:
 
-- **Seamless continuation** of interrupted work
-- **Full context restoration** including tools and agent state
-- **Interactive session browsing** with preview and filtering
-- **Autonomous resumption** with `--resume --continue`
-- **Multi-agent support** for parallel session restoration
-- **Flexible log management** with custom directories
+- **Плавное продолжение** прерванной работы
+- **Полное восстановление контекста**, включая инструменты и состояние агента
+- **Интерактивный просмотр сессий** с предпросмотром и фильтрацией
+- **Автономное возобновление** с `--resume --continue`
+- **Поддержка многоагентных систем** для восстановления параллельных сессий
+- **Гибкое управление логами** с пользовательскими каталогами
 
-Whether you're conducting security audits, running penetration tests, or performing complex analysis, session resume ensures you never lose your progress.
+Будь то проведение проверок безопасности, выполнение пентестов или выполнение сложного анализа, возобновление сессии гарантирует, что вы никогда не потеряете прогресс.

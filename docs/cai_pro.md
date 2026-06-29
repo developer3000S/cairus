@@ -14,16 +14,15 @@
 
 Ландшафт кибербезопасностной ИИ-индустрии быстро развивается, и профессионалам нужны инструменты, которые успевают за самыми сложными угрозами. CAI PRO предоставляет:
 
-
-- **🚀 The Best Cybersecurity LLMs**: Unlimited access to the **entire Alias model family** (`alias1` and successors), purpose-built for offensive and defensive security and **outperforming GPT-5** in CTF benchmarks
-- **♾️ Unlimited Alias Tokens**: No per-query metering, no monthly token caps — run long engagements and parallel agents without rationing
-- **🧩 Extended Scaffold Library**: Access to additional agent scaffolds and patterns (red/blue/purple teamers, bug bounty, DFIR, APT, reverse engineering, SAST, SDR/Wi-Fi, and more) beyond the Community defaults
-- **🔓 Unrestricted Mode**: Zero-refusal operation with optional model steering for authorized offensive security work — no nerfed responses on exploitation, payload crafting, or post-exploitation tradecraft
-- **🛡️ No Third-Party Telemetry**: PRO ships with all outbound third-party telemetry disabled by default — your prompts, targets, and findings never leave Alias infrastructure
-- **🇪🇺 European Hosting**: GDPR and NIS2 compliant infrastructure ensuring maximum privacy and data sovereignty
-- **💬 Professional Support**: Dedicated technical support to help you maximize your security testing capabilities
-- **📱 Mobile UI (iOS)**: Native iOS app for security testing on the go - **[Join TestFlight Beta](https://testflight.apple.com/join/nXZZD4Z5)**
-- **⚡ Advanced Features**: Terminal UI (deprecated) and other subscriber-focused capabilities beyond the Community Edition defaults
+- **🚀 Лучшие LLM кибербезопасности**: Неограниченный доступ к **всему семейству моделей Alias** (`alias1` и последующие версии), созданные специально для наступательной и оборонительной безопасности и **превосходящие GPT-5** в бенчмарках CTF
+- **♾️ Неограниченные токены Alias**: Без дозирования по запросам, без ежемесячных ограничений токенов — запускайте длительные взаимодействия и параллельные агенты без ограничений
+- **🧩 Расширенная библиотека scaffolds**: Доступ к дополнительным scaffold-ам агентов и шаблонам (красные/синие/фиолетовые команды, охота на ошибки, DFIR, APT, обратное проектирование, SAST, SDR/Wi-Fi и другие) за пределами Community стандартов
+- **🔓 Режим без ограничений**: Операция с нулевыми отказами с необязательным направлением модели для авторизованной наступательной безопасности — нет нейтрализованных ответов на эксплуатацию, создание полезной нагрузки или торговлю после эксплуатации
+- **🛡️ Никакой телеметрии третьих лиц**: PRO поставляется со всеми исходящими данными телеметрии третьих лиц отключенными по умолчанию — ваши подсказки, цели и результаты никогда не покидают инфраструктуру Alias
+- **🇪🇺 Европейский хостинг**: Инфраструктура, соответствующая GDPR и NIS2, обеспечивающая максимальную приватность и суверенитет данных
+- **💬 Профессиональная поддержка**: Выделенная техническая поддержка, чтобы помочь вам максимизировать возможности тестирования безопасности
+- **📱 Мобильный UI (iOS)**: Нативное приложение для iOS для тестирования безопасности на ходу - **[Присоединитесь к TestFlight Beta](https://testflight.apple.com/join/nXZZD4Z5)**
+- **⚡ Расширенные функции**: Интерфейс терминала (устарел) и другие возможности, ориентированные на подписчиков, за пределами Community Edition стандартов
 
 ---
 
@@ -31,335 +30,335 @@
 
 <div class="comparison-table" markdown>
 
-| Feature | CAI FREE | CAI PRO |
+| Функция | CAI FREE | CAI PRO |
 |---------|-------------------|---------|
-| **Core Framework** | ✅ Access | ✅ Full Access |
-| **300+ AI Models** | ✅ BYO API Keys | ✅ BYO API Keys |
-| **Built-in Security Tools** | ✅ Full Suite | ✅ Full Suite |
-| **Agent Patterns** | ✅ Base Patterns | ✅ All Patterns |
-| **Agent Scaffold Library** | ✅ Core scaffolds | ✅ **Extended catalog** (red/blue/purple, bug bounty, DFIR, APT, RE, SAST, SDR/Wi-Fi…) |
-| **Command Line Interface** | ✅ Yes | ✅ Yes |
-| **European Data Hosting** | ✅ **GDPR + NIS2 Compliant** | ✅ **GDPR + NIS2 Compliant** |
-| **Alias Model Family (`alias1`+)** | ❌ Not Available | ✅ **Unlimited Tokens — best-in-class cybersecurity LLMs** |
-| **Unrestricted Mode** | ❌ Refusals from BYO models | ✅ **Zero refusals + model steering** for authorized offensive work |
-| **Third-Party Telemetry** | ⚠️ Enabled by default (opt-out) | ✅ **Disabled by default** — no outbound third-party reporting |
-| **Mobile UI (iOS App)** | ❌ | ✅ **Native iOS App** - [TestFlight](https://testflight.apple.com/join/nXZZD4Z5) |
-| **Terminal User Interface (TUI)** | ❌ | ✅ Multi-terminal (Deprecated) |
-| **Advanced Reporting** | ❌ | ✅ Professional formats |
-| **Priority Support** | ❌ Community | ✅ **Professional** |
-| **Commercial Use License** | ❌ Research Only | ✅ **Full Commercial** |
-| **Custom Extensions** | ❌ | ✅ Available on request |
-| **Pricing** | **Free** (Research) | **€350/month** |
+| **Основная платформа** | ✅ Доступ | ✅ Полный доступ |
+| **300+ AI модели** | ✅ Собственные ключи API | ✅ Собственные ключи API |
+| **Встроенные инструменты безопасности** | ✅ Полный набор | ✅ Полный набор |
+| **Шаблоны агентов** | ✅ Базовые шаблоны | ✅ Все шаблоны |
+| **Библиотека Scaffold агентов** | ✅ Основные scaffolds | ✅ **Расширенный каталог** (красные/синие/фиолетовые, охота на ошибки, DFIR, APT, RE, SAST, SDR/Wi-Fi…) |
+| **Интерфейс командной строки** | ✅ Да | ✅ Да |
+| **Европейский хостинг данных** | ✅ **Соответствие GDPR + NIS2** | ✅ **Соответствие GDPR + NIS2** |
+| **Семейство моделей Alias (`alias1`+)** | ❌ Недоступно | ✅ **Неограниченные токены — лучшие LLM кибербезопасности** |
+| **Режим без ограничений** | ❌ Отказы из BYO моделей | ✅ **Нулевые отказы + направление модели** для авторизованной наступательной работы |
+| **Телеметрия третьих лиц** | ⚠️ Включена по умолчанию (отключение) | ✅ **Отключена по умолчанию** — без исходящих отчетов третьих лиц |
+| **Мобильный UI (приложение iOS)** | ❌ | ✅ **Нативное приложение iOS** - [TestFlight](https://testflight.apple.com/join/nXZZD4Z5) |
+| **Интерфейс терминала (TUI)** | ❌ | ✅ Мульти-терминал (Устарел) |
+| **Расширенная отчетность** | ❌ | ✅ Профессиональные форматы |
+| **Приоритетная поддержка** | ❌ Community | ✅ **Профессиональная** |
+| **Лицензия коммерческого использования** | ❌ Только исследование | ✅ **Полная коммерческая** |
+| **Пользовательские расширения** | ❌ | ✅ Доступны по запросу |
+| **Цена** | **Бесплатно** (исследование) | **€350/месяц** |
 
 </div>
 
 ---
 
-## The Alias Model Family — The Best Cybersecurity LLMs
+## Семейство моделей Alias — лучшие LLM кибербезопасности
 
 <div class="highlight-box" markdown>
 
-### 🏆 **Beats GPT-5 in Cybersecurity Benchmarks**
+### 🏆 **Превосходит GPT-5 в бенчмарках кибербезопасности**
 
-The Alias model family — currently led by **`alias1`** with successor models in active training — is purpose-built for security work. CAI PRO grants **unlimited token access** to the entire family, with no monthly caps, no per-query metering, and no rate-limit throttling at the API tier.
+Семейство моделей Alias — в настоящее время возглавляемое **`alias1`** с последующими моделями в активном обучении — специально разработано для работ в области безопасности. CAI PRO предоставляет **неограниченный доступ по токенам** ко всему семейству, без ежемесячных ограничений, без дозирования по запросам и без дросселирования лимитов скорости на уровне API.
 
-Trained specifically for:
+Обучено специально для:
 
-- **Offensive Security**: Penetration testing, exploit development, vulnerability research
-- **Bug Bounty Hunting**: Automated reconnaissance, analysis, and exploitation
-- **CTF Competitions**: Top performance in Capture The Flag challenges
-- **Zero Refusals**: No ethical restrictions for authorized security testing
+- **Наступательная безопасность**: Тестирование на проникновение, разработка эксплойтов, исследование уязвимостей
+- **Охота на ошибки**: Автоматизированное сканирование, анализ и эксплуатация
+- **Соревнования CTF**: Лучшая производительность в конкурсах Capture The Flag
+- **Нулевые отказы**: Нет этических ограничений для авторизованного тестирования безопасности
 
-**Performance Highlights:**
-- Outperforms GPT-5 in AI vs AI cybersecurity benchmarks
-- 500B-parameter architecture optimized for security workflows
-- Unrestricted responses for authorized pentesting engagements
-- Unlimited tokens for long engagements, multi-agent orchestration, and overnight autonomous runs
+**Высокие показатели производительности:**
+- Превосходит GPT-5 в бенчмарках кибербезопасности ИИ против ИИ
+- 500B-параметровая архитектура, оптимизированная для рабочих процессов безопасности
+- Неограниченные ответы для авторизованных взаимодействий тестирования на проникновение
+- Неограниченные токены для длительных взаимодействий, оркестровки множественных агентов и автономных ночных запусков
 
 </div>
 
-[View Full Benchmarks →](https://aliasrobotics.com/alias1.php#benchmarking)
+[Просмотреть полные бенчмарки →](https://aliasrobotics.com/alias1.php#benchmarking)
 
-### Research Validation
+### Валидация исследованиями
 
-The performance of `alias1` and the CAI framework is validated through rigorous peer-reviewed research:
+Производительность `alias1` и платформы CAI подтверждается строгими рецензируемыми исследованиями:
 
 - 📊 [**CAIBench: Cybersecurity AI Benchmark**](https://arxiv.org/pdf/2510.24317) (2025)
-  Modular meta-benchmark framework for evaluating LLM models across offensive and defensive cybersecurity domains. `alias1` demonstrates superior performance compared to general-purpose models.
+  Модульная мета-benchmark платформа для оценки моделей LLM в областях наступательной и оборонительной кибербезопасности. `alias1` демонстрирует превосходную производительность по сравнению с моделями общего назначения.
 
 - 🎯 [**Evaluating Agentic Cybersecurity in Attack/Defense CTFs**](https://arxiv.org/pdf/2510.17521) (2025)
-  Real-world evaluation showing defensive agents achieved 54.3% patching success versus 28.3% offensive initial access. Validates practical effectiveness of CAI agents in live CTF environments.
+  Оценка в реальных условиях, показывающая, что агенты защиты достигли 54.3% успеха исправления в сравнении с 28.3% начального доступа атакующих. Подтверждает практическую эффективность агентов CAI в живых окружениях CTF.
 
 - 🚀 [**Cybersecurity AI (CAI) Framework**](https://arxiv.org/pdf/2504.06017) (2025)
-  Core framework paper demonstrating that CAI outperforms humans by up to **3,600× in specific security testing scenarios**, establishing a new standard for automated security assessment.
+  Основная платформа демонстрирует, что CAI превосходит людей в **3600 раз в конкретных сценариях тестирования безопасности**, устанавливая новый стандарт для автоматизированной оценки безопасности.
 
 - 🛡️ [**Hacking the AI Hackers via Prompt Injection**](https://arxiv.org/pdf/2508.21669) (2025)
-  Demonstrates four-layer guardrail defenses against prompt injection attacks, ensuring `alias1` remains secure even when processing adversarial inputs.
+  Демонстрирует четырёхуровневую систему защиты от атак инъекции подсказок, гарантируя, что `alias1` остается безопасной даже при обработке враждебных входов.
 
 - 📚 [**CAI Fluency: Educational Framework**](https://arxiv.org/pdf/2508.13588) (2025)
-  Comprehensive educational platform for democratizing cybersecurity AI knowledge and best practices.
+  Комплексная образовательная платформа для демократизации знаний в области AI кибербезопасности и лучших практик.
 
-**Explore all research:** [Alias Robotics Research Library](https://aliasrobotics.com/research-security.php#papers) (24+ peer-reviewed publications)
-
----
-
-## Why We Offer CAI PRO
-
-### Sustainability & Quality
-
-Building and maintaining CAI is resource-intensive. CAI PRO enables us to:
-
-#### 1. **Deliver State-of-the-Art AI Without Restrictions**
-
-- **Training Costs**: Developing `alias1` required significant investment in model training, dataset curation, and fine-tuning for cybersecurity tasks
-- **Inference Infrastructure**: Hosting a custom 500B-parameter model is expensive—each query requires substantial computational resources
-- **Continuous Improvement**: Ongoing research, model updates, and performance optimization require dedicated funding
-
-#### 2. **Ensure Project Sustainability**
-
-- **Open Source Commitment**: CAI Community Edition remains free for research, empowering the security community
-- **Research Line Funding**: Revenue from PRO subscriptions supports continued academic research and publication
-- **European Operations**: Maintaining GDPR-compliant infrastructure in Europe (not cheap US cloud providers) ensures user privacy but increases costs
-
-#### 3. **Provide Professional Support**
-
-- **Dedicated Assistance**: PRO subscribers receive priority technical support from our security experts
-- **Custom Extensions**: Work with our team to develop tailored tools and agents for your specific use cases
-- **Early Access**: Get new features and models before public release
-
-#### 4. **Privacy & Compliance Guarantees**
-
-- **GDPR Compliance**: Full compliance with European data protection regulations
-- **NIS2 Standards**: Meeting network and information security directive requirements
-- **Data Sovereignty**: Your data stays in Europe, hosted on our infrastructure
-- **No Third-Party Sharing**: Unlike most AI providers, we never share your security testing data
-
-### Fair Pricing
-
-**€350/month** provides:
-- **Unlimited `alias1` tokens** (compare: OpenAI GPT-4o costs ~$2.50 per 1M tokens)
-- **Professional support** (compare: enterprise support typically $1000+/month)
-- **Privacy guarantees** (priceless for security professionals)
-- **Commercial license** (required for security consulting businesses)
-
-Most security professionals already pay similar or higher amounts for:
-- **Burp Suite Professional**: $449/year ($37/month)
-- **ChatGPT Plus/Pro**: $20-200/month (with severe restrictions)
-- **Other AI security tools**: $500-2000/month (closed-source, inferior models)
-
-**CAI PRO delivers superior performance at competitive pricing** while keeping your data private and supporting open-source research.
+**Изучите все исследования:** [Библиотека исследований Alias Robotics](https://aliasrobotics.com/research-security.php#papers) (24+ рецензируемых публикаций)
 
 ---
 
-## Exclusive CAI PRO Features
+## Почему мы предлагаем CAI PRO
 
-### 🧩 Extended Scaffold Library
+### Устойчивость и качество
 
-CAI PRO unlocks the full catalog of agent scaffolds — pre-built, role-specialized agents you can drop into a workflow or compose into multi-agent operations:
+Построение и поддержка CAI требует значительных ресурсов. CAI PRO позволяет нам:
 
-- **Offensive**: `red_teamer`, `bug_bounter`, `web_pentester`, `apt_agent`, `replay_attack_agent`, `subghz_sdr_agent`, `wifi_security_tester`
-- **Defensive & Forensics**: `blue_teamer`, `dfir`, `memory_analysis_agent`, `network_traffic_analyzer`, `compliance_agent`
-- **Code & Reverse Engineering**: `codeagent`, `reverse_engineering_agent`, `android_sast_agent`
-- **Orchestration**: `orchestration_agent`, `selection_agent`, `purple_teamer_gctr`, `continuous_ops_agent`, `reporter`, `retester`
+#### 1. **Доставлять передовые ИИ без ограничений**
 
-New scaffolds ship regularly to PRO subscribers ahead of the Community release window. Custom scaffolds can also be developed on request.
+- **Затраты на обучение**: Разработка `alias1` требовала значительных инвестиций в обучение моделей, курирование набора данных и тонкую настройку для задач кибербезопасности
+- **Инфраструктура вывода**: Размещение пользовательской модели с 500B параметров дорого — каждый запрос требует значительных вычислительных ресурсов
+- **Постоянное улучшение**: Текущие исследования, обновления моделей и оптимизация производительности требуют выделенного финансирования
 
-### 🔓 Unrestricted Mode
+#### 2. **Обеспечить устойчивость проекта**
 
-CAI PRO operates with **zero refusals** for authorized security testing. This includes:
+- **Приверженность открытому исходному коду**: CAI Community Edition остается бесплатной для исследований, расширяя возможности сообщества безопасности
+- **Финансирование исследований**: Доход от подписок PRO поддерживает продолжающиеся академические исследования и публикации
+- **Европейские операции**: Поддержание инфраструктуры, соответствующей GDPR в Европе (а не на дешевых облачных провайдерах США) обеспечивает приватность пользователей, но увеличивает затраты
 
-- **No safety nerfing** on exploit development, payload crafting, lateral movement, or post-exploitation tradecraft
-- **Optional model steering** (abliteration-based) to suppress residual refusals from BYO third-party models
-- **Authorization-context aware**: prompts framed within authorized engagement scope are answered fully and directly
-- **Guardrail toggles**: `CAI_GUARDRAILS` is opt-in, not enforced, so you control the constraint level
+#### 3. **Предоставлять профессиональную поддержку**
 
-This stands in contrast to general-purpose providers (OpenAI, Anthropic, Google), whose models refuse a significant fraction of legitimate offensive security queries even with valid authorization context.
+- **Выделенная помощь**: Подписчики PRO получают приоритетную техническую поддержку от наших экспертов по безопасности
+- **Пользовательские расширения**: Работайте с нашей командой над разработкой инструментов и агентов, адаптированных под ваши конкретные использования
+- **Ранний доступ**: Получайте новые функции и модели до публичного релиза
 
-### 🛡️ Third-Party Telemetry Disabled
+#### 4. **Гарантии приватности и соответствия**
 
-CAI PRO ships with **all outbound third-party telemetry disabled by default**:
+- **Соответствие GDPR**: Полное соответствие европейским нормативам защиты данных
+- **Стандарты NIS2**: Соответствие требованиям директивы сетевой и информационной безопасности
+- **Суверенитет данных**: Ваши данные остаются в Европе, размещенные на нашей инфраструктуре
+- **Никакого обмена третьими лицами**: В отличие от большинства провайдеров ИИ, мы никогда не делимся данными тестирования безопасности
 
-- **No OpenInference / OpenAI instrumentation** uploads — prompts, completions, and tool calls stay local
-- **No anonymous usage analytics** sent to third parties
-- **Alias-only data plane**: the only outbound traffic is to the Alias inference endpoint (European, GDPR/NIS2)
-- **Verifiable**: PRO is distributed as the `cai-framework-privacy` build variant, with telemetry hooks removed from the wheel — not just disabled by config
+### Справедливое ценообразование
 
-For operators handling sensitive targets (red team engagements, client pentests, internal SOC work), this guarantees that **target names, payloads, credentials, and findings never reach a third-party SaaS**.
+**€350/месяц** обеспечивает:
+- **Неограниченные токены `alias1`** (сравнение: OpenAI GPT-4o стоит ~$2.50 за 1M токенов)
+- **Профессиональная поддержка** (сравнение: корпоративная поддержка обычно $1000+/месяц)
+- **Гарантии приватности** (бесценно для специалистов по безопасности)
+- **Коммерческая лицензия** (требуется для компаний консультирования по безопасности)
 
-### 🖥️ Terminal User Interface (TUI)
+Большинство специалистов по безопасности уже платят аналогичные или более высокие суммы за:
+- **Burp Suite Professional**: $449/год ($37/месяц)
+- **ChatGPT Plus/Pro**: $20-200/месяц (со строгими ограничениями)
+- **Другие инструменты AI безопасности**: $500-2000/месяц (закрытый исходный код, худшие модели)
 
-Run multiple agents in parallel with an intuitive multi-terminal interface:
-
-- **Parallel Execution**: Run 4+ agents simultaneously with independent contexts
-- **Visual Monitoring**: Real-time cost tracking, model selection, and agent status
-- **Team Workflows**: Orchestrate red team, blue team, and bug bounty agents together
-- **Keyboard Shortcuts**: Efficient navigation and command execution
-
-[TUI Documentation →](tui/tui_index.md)
-
-### 📝 Advanced Reporting
-
-Generate professional security reports automatically:
-
-- **CTF Reports**: Detailed writeups with exploitation steps
-- **Pentesting Reports**: Executive summaries and technical findings
-- **NIS2 Compliance**: Generate reports meeting regulatory requirements
-- **Custom Formats**: Markdown, PDF, HTML output options
+**CAI PRO обеспечивает превосходную производительность по конкурентным ценам** при сохранении приватности ваших данных и поддержке исследований открытого исходного кода.
 
 ---
 
-## Getting Started with CAI PRO
+## Эксклюзивные функции CAI PRO
 
-### 1. Subscribe
+### 🧩 Расширенная библиотека Scaffolds
 
-Visit [https://aliasrobotics.com/cybersecurityai.php](https://aliasrobotics.com/cybersecurityai.php) to:
+CAI PRO открывает полный каталог scaffold-ов агентов — предварительно построенные, специализированные по ролям агенты, которые можно поместить в рабочий процесс или составить в операции множественных агентов:
 
-- Choose your subscription plan
-- Set up billing (secure European payment processing)
-- Receive your `ALIAS_API_KEY`
+- **Наступательные**: `red_teamer`, `bug_bounter`, `web_pentester`, `apt_agent`, `replay_attack_agent`, `subghz_sdr_agent`, `wifi_security_tester`
+- **Оборонительные и Forensics**: `blue_teamer`, `dfir`, `memory_analysis_agent`, `network_traffic_analyzer`, `compliance_agent`
+- **Код и обратное проектирование**: `codeagent`, `reverse_engineering_agent`, `android_sast_agent`
+- **Оркестровка**: `orchestration_agent`, `selection_agent`, `purple_teamer_gctr`, `continuous_ops_agent`, `reporter`, `retester`
 
-### 2. Configure Your Environment
+Новые scaffolds регулярно поставляются подписчикам PRO раньше окна релиза Community. Пользовательские scaffolds также могут быть разработаны по запросу.
 
-Update your `.env` file:
+### 🔓 Режим без ограничений
+
+CAI PRO работает с **нулевыми отказами** для авторизованного тестирования безопасности. Это включает:
+
+- **Никакого ослабления безопасности** на разработку эксплойтов, создание полезной нагрузки, боковое движение или торговлю после эксплуатации
+- **Необязательное направление модели** (на основе абертации) для подавления остаточных отказов из BYO моделей третьих лиц
+- **Осведомлено об авторизации**: подсказки, сформулированные в контексте авторизованного взаимодействия, отвечаются полностью и напрямую
+- **Переключатели guardrail**: `CAI_GUARDRAILS` — это опция, а не обязательное требование, поэтому вы контролируете уровень ограничений
+
+Это контрастирует с провайдерами общего назначения (OpenAI, Anthropic, Google), чьи модели отказывают значительную часть легитимных запросов наступательной безопасности даже с валидным контекстом авторизации.
+
+### 🛡️ Телеметрия третьих лиц отключена
+
+CAI PRO поставляется со **всеми исходящими данными телеметрии третьих лиц отключенными по умолчанию**:
+
+- **Никакой загрузки OpenInference / OpenAI instrumentation** — подсказки, завершения и вызовы инструментов остаются локальными
+- **Никакой анонимной статистики использования** отправляется третьим лицам
+- **Только плоскость данных Alias**: единственный исходящий трафик — это конечная точка вывода Alias (европейская, GDPR/NIS2)
+- **Проверяемо**: PRO распространяется как вариант сборки `cai-framework-privacy` с удаленными хуками телеметрии из wheel — не только отключены по конфигурации
+
+Для операторов, работающих с чувствительными целями (взаимодействия красной команды, тесты на проникновение клиентов, внутренняя работа SOC), это гарантирует, что **имена целей, полезные нагрузки, учетные данные и результаты никогда не достигают SaaS третьей стороны**.
+
+### 🖥️ Интерфейс терминала (TUI)
+
+Запускайте несколько агентов параллельно с интуитивным интерфейсом мультитерминала:
+
+- **Параллельное выполнение**: Запускайте 4+ агента одновременно с независимыми контекстами
+- **Визуальный мониторинг**: Отслеживание затрат в реальном времени, выбор модели и статус агента
+- **Командные рабочие процессы**: Оркестровка красной команды, синей команды и агентов охоты на ошибки вместе
+- **Сочетания клавиш**: Эффективная навигация и выполнение команд
+
+[Документация TUI →](tui/tui_index.md)
+
+### 📝 Расширенная отчетность
+
+Генерируйте профессиональные отчеты безопасности автоматически:
+
+- **Отчеты CTF**: Детальные описания с шагами эксплуатации
+- **Отчеты о тестировании на проникновение**: Резюме для руководства и технические результаты
+- **Соответствие NIS2**: Генерируйте отчеты, отвечающие нормативным требованиям
+- **Пользовательские форматы**: Вывод в форматах Markdown, PDF, HTML
+
+---
+
+## Начало работы с CAI PRO
+
+### 1. Подписка
+
+Посетите [https://aliasrobotics.com/cybersecurityai.php](https://aliasrobotics.com/cybersecurityai.php) для:
+
+- Выбор плана подписки
+- Настройка выставления счетов (безопасная европейская обработка платежей)
+- Получение вашего `ALIAS_API_KEY`
+
+### 2. Конфигурация окружения
+
+Обновите файл `.env`:
 
 ```bash
-# CAI PRO Configuration
+# Конфигурация CAI PRO
 ALIAS_API_KEY="sk-your-caipro-key-here"
 CAI_MODEL="alias1"
 CAI_STREAM=False
 
-# Optional: Enable advanced features
+# Опционально: Включить расширенные функции
 CAI_TUI_MODE=true
 CAI_GUARDRAILS=true
 ```
 
-### 3. Launch CAI PRO
+### 3. Запуск CAI PRO
 
-#### CLI Mode (Standard)
+#### Режим CLI (стандартный)
 ```bash
 cai
 ```
 
-#### TUI Mode (Multi-terminal)
+#### Режим TUI (мульти-терминал)
 ```bash
 cai --tui
 ```
 
-### 4. Verify Access
+### 4. Проверка доступа
 
-Check that you're using CAI PRO features:
+Проверьте, что вы используете функции CAI PRO:
 
 ```bash
 CAI> /model
-# Should show alias1 is available
+# Должно показывать, что alias1 доступна
 
 CAI> --tui
-# Should launch multi-terminal interface
+# Должно запустить интерфейс мультитерминала
 ```
 
 ---
 
-## Support & Resources
+## Поддержка и ресурсы
 
-### Professional Support Channels
+### Профессиональные каналы поддержки
 
-**CAI PRO subscribers receive:**
+**Подписчики CAI PRO получают:**
 
-- **Email Support**: research@aliasrobotics.com (48-hour response SLA)
-- **Priority Discord**: Exclusive #pro-support channel
-- **Quarterly Strategy Calls**: Discuss roadmap and feature requests
-- **Custom Development**: Request tailored agents and extensions
+- **Поддержку по электронной почте**: research@aliasrobotics.com (SLA 48 часов)
+- **Приоритетный Discord**: Эксклюзивный канал #pro-support
+- **Квартальные стратегические звонки**: Обсудите дорожную карту и запросы функций
+- **Пользовательская разработка**: Запросите инструменты и расширения, адаптированные под ваши нужды
 
-### Documentation
+### Документация
 
-- **[TUI Guide](tui/tui_index.md)**: Complete Terminal UI documentation
-- **[Agent Reference](agents.md)**: All available agents and configurations
-- **[Command Reference](cai/getting-started/commands.md)**: Full CLI/TUI command list
-- **[Benchmarks](cai_benchmark.md)**: Performance data and comparisons
+- **[TUI руководство](tui/tui_index.md)**: Полная документация Terminal UI
+- **[Справка агентов](agents.md)**: Все доступные агенты и конфигурации
+- **[Справка команд](cai/getting-started/commands.md)**: Полный список команд CLI/TUI
+- **[Бенчмарки](cai_benchmark.md)**: Данные производительности и сравнения
 
-### Community Resources
+### Ресурсы сообщества
 
-Join the CAI community (free for all users):
+Присоединитесь к сообществу CAI (бесплатно для всех пользователей):
 
-- **[Discord](https://discord.gg/fnUFcTaQAC)**: Active community of 1000+ security researchers
-- **[GitHub](https://github.com/aliasrobotics/cai)**: Source code, issues, and contributions
-- **[Research Papers](https://aliasrobotics.com/cybersecurityai.php)**: Academic publications
-- **[Case Studies](https://aliasrobotics.com/case-studies-robot-cybersecurity.php)**: Real-world applications
-
----
-
-## Frequently Asked Questions
-
-### Can I use CAI Community for commercial work?
-
-No. The Community Edition license restricts use to research and educational purposes. Commercial use (e.g., providing pentesting services, security consulting) requires CAI PRO.
-
-### What happens if I cancel my subscription?
-
-- You retain access to CAI Community Edition
-- `alias1` model access is immediately revoked
-- TUI and advanced features are disabled
-- Your data and configurations remain intact
-- You can re-subscribe anytime
-
-### Do you offer team/enterprise pricing?
-
-Yes! Contact research@aliasrobotics.com for:
-- **Team plans** (5+ users): Volume discounts
-- **Enterprise plans** (20+ users): Custom pricing, on-premise deployment
-- **Academic licenses**: Special rates for universities and research institutions
-
-### Is my security testing data private?
-
-**Absolutely.** CAI PRO guarantees:
-- **No training on your data**: Your pentesting activities never improve our models (unless you explicitly opt-in)
-- **European hosting**: All data processed in GDPR-compliant datacenters
-- **No third-party sharing**: Unlike OpenAI/Anthropic, we never send your data elsewhere
-- **Encryption**: End-to-end encryption for all communications
-
-### Can I switch between models?
-
-Yes! CAI PRO includes:
-- **Unlimited `alias1` tokens** (your PRO model)
-- **BYO API keys**: Continue using OpenAI, Anthropic, etc. with your own keys
-- **Mix and match**: Use `alias1` for exploitation, GPT-4 for reporting, etc.
-
-### What if alias1 refuses a query?
-
-`alias1` has **zero refusals** for authorized security testing. If you encounter issues:
-1. Ensure your prompt includes security context (e.g., "authorized pentest of...")
-2. Check your `CAI_GUARDRAILS` setting (may block malicious patterns)
-3. Contact support—we'll investigate immediately
+- **[Discord](https://discord.gg/fnUFcTaQAC)**: Активное сообщество 1000+ исследователей безопасности
+- **[GitHub](https://github.com/aliasrobotics/cai)**: Исходный код, проблемы и вклады
+- **[Исследовательские документы](https://aliasrobotics.com/cybersecurityai.php)**: Академические публикации
+- **[Примеры практического применения](https://aliasrobotics.com/case-studies-robot-cybersecurity.php)**: Приложения реального мира
 
 ---
 
-## Upgrade Today
+## Часто задаваемые вопросы
 
-**Transform your security testing workflow with CAI PRO.**
+### Могу ли я использовать CAI Community для коммерческой работы?
+
+Нет. Лицензия Community Edition ограничивает использование исследованиями и образовательными целями. Коммерческое использование (например, предоставление услуг тестирования на проникновение, консультирование по безопасности) требует CAI PRO.
+
+### Что происходит, если я отменю подписку?
+
+- Вы сохраняете доступ к CAI Community Edition
+- Доступ к модели `alias1` немедленно отозван
+- TUI и расширенные функции отключены
+- Ваши данные и конфигурации остаются нетронутыми
+- Вы можете переподписаться в любой момент
+
+### Вы предлагаете командные/корпоративные цены?
+
+Да! Свяжитесь с research@aliasrobotics.com для:
+- **Командные планы** (5+ пользователей): Скидки за объем
+- **Корпоративные планы** (20+ пользователей): Пользовательское ценообразование, развертывание на месте
+- **Академические лицензии**: Специальные тарифы для университетов и исследовательских учреждений
+
+### Приватны ли мои данные тестирования безопасности?
+
+**Абсолютно.** CAI PRO гарантирует:
+- **Никакого обучения на ваших данных**: Ваша деятельность по тестированию на проникновение никогда не улучшает наши модели (если вы явно не согласитесь)
+- **Европейский хостинг**: Все данные обработаны в центрах данных, соответствующих GDPR
+- **Никакого обмена третьими лицами**: В отличие от OpenAI/Anthropic, мы никогда не отправляем ваши данные куда-либо еще
+- **Шифрование**: Сквозное шифрование для всех коммуникаций
+
+### Могу ли я переключаться между моделями?
+
+Да! CAI PRO включает:
+- **Неограниченные токены `alias1`** (ваша модель PRO)
+- **Собственные ключи API**: Продолжайте использовать OpenAI, Anthropic и т.д. с вашими собственными ключами
+- **Смешивание и подбор**: Используйте `alias1` для эксплуатации, GPT-4 для отчетности и т.д.
+
+### Что если alias1 отказывает запрос?
+
+`alias1` имеет **нулевые отказы** для авторизованного тестирования безопасности. Если вы столкнетесь с проблемами:
+1. Убедитесь, что ваша подсказка включает контекст безопасности (например, "авторизованное тестирование на проникновение...")
+2. Проверьте параметр `CAI_GUARDRAILS` (может блокировать вредоносные паттерны)
+3. Свяжитесь с поддержкой — мы немедленно будем расследовать
+
+---
+
+## Обновитесь сегодня
+
+**Трансформируйте свой рабочий процесс тестирования безопасности с CAI PRO.**
 
 <div class="cta-box" markdown>
 
-### 🚀 **Ready to Upgrade?**
+### 🚀 **Готовы к обновлению?**
 
-- ✅ Unlimited tokens across the Alias model family — best-in-class cybersecurity LLMs
-- ✅ Extended scaffold library — every red/blue/purple, bug bounty, DFIR, RE, SAST agent
-- ✅ Unrestricted Mode — zero refusals and model steering for authorized offensive work
-- ✅ Third-party telemetry disabled by default — no SaaS leakage of prompts or findings
-- ✅ Terminal UI with parallel agents
-- ✅ Context monitoring and optimization
-- ✅ Professional support
-- ✅ European data privacy
-- ✅ Commercial use license
+- ✅ Неограниченные токены по всему семейству моделей Alias — лучшие LLM кибербезопасности
+- ✅ Расширенная библиотека scaffold — каждый красный/синий/фиолетовый, охота на ошибки, DFIR, RE, SAST агент
+- ✅ Режим без ограничений — нулевые отказы и направление модели для авторизованной наступательной работы
+- ✅ Телеметрия третьих лиц отключена по умолчанию — никакой утечки SaaS подсказок или результатов
+- ✅ Интерфейс терминала с параллельными агентами
+- ✅ Мониторинг и оптимизация контекста
+- ✅ Профессиональная поддержка
+- ✅ Европейская приватность данных
+- ✅ Коммерческая лицензия
 
-**€350/month** · No long-term contracts · Cancel anytime
+**€350/месяц** · Нет долгосрочных контрактов · Отмена в любой момент
 
-**[Get CAI PRO →](https://aliasrobotics.com/cybersecurityai.php)**
+**[Получить CAI PRO →](https://aliasrobotics.com/cybersecurityai.php)**
 
 </div>
 
 ---
 
 <small>
-*Have questions? Contact research@aliasrobotics.com*
-*Need a quote for your organization? [Request enterprise pricing →](mailto:research@aliasrobotics.com?subject=CAI%20PRO%20Enterprise%20Inquiry)*
+*Есть вопросы? Свяжитесь с research@aliasrobotics.com*
+*Нужна котировка для вашей организации? [Запросить корпоративное ценообразование →](mailto:research@aliasrobotics.com?subject=CAI%20PRO%20Enterprise%20Inquiry)*
 </small>

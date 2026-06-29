@@ -1,4 +1,4 @@
-# Models
+# Модели
 
 SDK агентов поддерживает OpenAI-модели двумя способами:
 
@@ -55,8 +55,8 @@ async def main():
 
 Вы можете использовать других провайдеров LLM тремя способами (примеры [здесь](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/)):
 
-1. [`set_default_openai_client`][cai.sdk.agents.set_default_openai_client] полезен, если вы хотите глобально использовать экземпляр `AsyncOpenAI` в качестве клиента LLM. Это работает в случаях, когда провайдер LLM имеет совместимый с OpenAI API endpoint, и вы можете задать `base_url` и `api_key`. Смотрите настраиваемый пример в [examples/model_providers/custom_example_global.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_global.py).
-2. [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider] работает на уровне `Runner.run`. Это позволяет сказать «использовать пользовательский провайдер моделей для всех агентов в этом запуске». Смотрите настраиваемый пример в [examples/model_providers/custom_example_provider.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_provider.py).
+1. [`set_default_openai_client`][cai.sdk.agents.set_default_openai_client] полезен, если вы хотите глобально использовать экземпляр `AsyncOpenAI` в качестве клиента LLM. Это работает, когда провайдер LLM имеет совместимый с OpenAI API endpoint, и вы можете задать `base_url` и `api_key`. Смотрите настраиваемый пример в [examples/model_providers/custom_example_global.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_global.py).
+2. [`ModelProvider`][cai.sdk.agents.models.interface.ModelProvider] работает на уровне `Runner.run`. Это позволяет указать «использовать пользовательский провайдер моделей для всех агентов в этом запуске». Смотрите настраиваемый пример в [examples/model_providers/custom_example_provider.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_provider.py).
 3. [`Agent.model`][cai.sdk.agents.agent.Agent.model] позволяет указать модель на конкретном экземпляре агента. Это позволяет смешивать и сочетать разных провайдеров для разных агентов. Смотрите пример в [examples/model_providers/custom_example_agent.py](https://github.com/openai/openai-agents-python/tree/main/examples/model_providers/custom_example_agent.py).
 
 Если у вас нет ключа API от `platform.openai.com`, мы рекомендуем отключить трассировку с помощью `set_tracing_disabled()` или настроить [другой процессор трассировки](tracing.md).

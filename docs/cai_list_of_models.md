@@ -1,105 +1,101 @@
 # Доступные модели
 
-
-
-The **Cybersecurity AI (CAI)** platform provides seamless integration with multiple Large Language Models (LLMs). This functionality allows users to leverage state-of-the-art AI capabilities for various cybersecurity tasks. CAI acts as a bridge between your security workflows and a wide range of LLMs, enhancing both flexibility and performance of AI agents.
+Платформа **Cybersecurity AI (CAI)** обеспечивает бесшовную интеграцию с несколькими большими языковыми моделями (LLM). Эта функциональность позволяет пользователям использовать возможности передовых ИИ-технологий для различных задач кибербезопасности. CAI служит мостом между вашими рабочими процессами безопасности и широким диапазоном LLM, повышая гибкость и производительность агентов ИИ.
 
 ---
 
-## 🚀 Alias Robotics Models (CAI PRO Exclusive)
+## 🚀 Модели Alias Robotics (Эксклюзивно для CAI PRO)
 
 ### `alias1` — Флагманская модель кибербезопасности
-
 
 <div class="highlight-box" markdown>
 
 **Самая передовая доступная ИИ-модель в области кибербезопасности.**
 
+`alias1` — это наша флагманская модель с 500 миллиардами параметров, специально обученная и оптимизированная для наступательных и оборонительных операций безопасности. Доступна исключительно с **[CAI PRO](cai_pro.md)**.
 
-`alias1` is our flagship 500B-parameter model, specifically trained and optimized for offensive and defensive security operations. Available exclusively with **[CAI PRO](cai_pro.md)**.
+**Ключевые особенности:**
+- ✅ **Превосходит GPT-5** в тестах кибербезопасности ИИ против ИИ
+- ✅ **Нулевые отказы** для авторизованного тестирования безопасности
+- ✅ **Неограниченные** ответы для тестирования на проникновение
+- ✅ **Неограниченные токены** включены в подписку CAI PRO
+- ✅ **Европейский хостинг** с соответствием GDPR и NIS2
+- ✅ **500 миллиардов параметров**, оптимизированные для рабочих процессов безопасности
 
-**Key Features:**
-- ✅ **Beats GPT-5** in AI vs AI cybersecurity benchmarks
-- ✅ **Zero refusals** for authorized security testing
-- ✅ **Unrestricted** responses for pentesting engagements
-- ✅ **Unlimited tokens** included with CAI PRO subscription
-- ✅ **European hosting** with GDPR & NIS2 compliance
-- ✅ **500B parameters** optimized for security workflows
+**Высокие показатели производительности:**
+- Лучший результат в соревнованиях CTF
+- Превосходные возможности разработки эксплойтов
+- Продвинутый анализ уязвимостей
+- Автоматизированное сканирование и перечисление
+- Оптимизация для охоты на баги
 
-**Performance Highlights:**
-- Top performer in CTF competitions
-- Superior exploit development capabilities
-- Advanced vulnerability analysis
-- Automated reconnaissance and enumeration
-- Bug bounty hunting optimization
-
-**Learn More:**
-- 📊 [View Benchmarks](https://aliasrobotics.com/alias1.php#benchmarking)
-- 📖 [Technical Details](https://aliasrobotics.com/alias1.php)
-- 🚀 [Upgrade to CAI PRO](cai_pro.md)
+**Узнайте больше:**
+- 📊 [Просмотр бенчмарков](https://aliasrobotics.com/alias1.php#benchmarking)
+- 📖 [Технические детали](https://aliasrobotics.com/alias1.php)
+- 🚀 [Перейти на CAI PRO](cai_pro.md)
 
 </div>
 
-### `alias0` - Legacy Model (Deprecated)
+### `alias0` - Устаревшая модель (Deprecated)
 
-!!! warning "Model Deprecated"
-    `alias0` is no longer available. All users should migrate to **`alias1`**, which offers superior performance, unrestricted capabilities, and continuous updates.
+!!! warning "Модель устарела"
+    `alias0` больше не доступна. Все пользователи должны мигрировать на **`alias1`**, которая предлагает превосходную производительность, неограниченные возможности и постоянные обновления.
 
-    **Migration:** If you're currently using `alias0`, simply update your configuration to use `alias1` with your CAI PRO subscription.
+    **Миграция:** Если вы в настоящее время используете `alias0`, просто обновите конфигурацию для использования `alias1` с подпиской CAI PRO.
 
-    [Learn about alias0 (historical reference) →](https://aliasrobotics.com/alias0.php)
+    [Узнайте об alias0 (историческая ссылка) →](https://aliasrobotics.com/alias0.php)
 
 ---
 
-## Community Models (300+ Available)
+## Общественные модели (300+ доступны)
 
-CAI supports **over 300 models** through its integration with [LiteLLM](https://github.com/BerriAI/litellm). You can use any of these models by providing your own API keys.
+CAI поддерживает **более 300 моделей** через интеграцию с [LiteLLM](https://github.com/BerriAI/litellm). Вы можете использовать любую из этих моделей, предоставив свои собственные ключи API.
 
-### Popular Model Providers
+### Популярные поставщики моделей
 
 #### Anthropic
-- **Claude 3.7** - Latest Anthropic model
-- **Claude 3.5 Sonnet** - Best for complex reasoning
-- **Claude 3 Opus** - Highest capability
-- **Claude 3 Haiku** - Fast and efficient
+- **Claude 3.7** - Последняя модель Anthropic
+- **Claude 3.5 Sonnet** - Лучшее для сложного мышления
+- **Claude 3 Opus** - Наивысшие возможности
+- **Claude 3 Haiku** - Быстро и эффективно
 
-**Configuration:**
+**Конфигурация:**
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
 export CAI_MODEL="claude-3-5-sonnet-20241022"
 ```
 
 #### OpenAI
-- **O1** - Advanced reasoning model
-- **O1 Mini** - Cost-effective reasoning
-- **O3 Mini** - Latest mini model
-- **GPT-4o** - Optimized GPT-4
-- **GPT-4.5 Preview** - Enhanced capabilities
+- **O1** - Модель продвинутого мышления
+- **O1 Mini** - Экономная модель с мышлением
+- **O3 Mini** - Последняя мини-модель
+- **GPT-4o** - Оптимизированный GPT-4
+- **GPT-4.5 Preview** - Улучшенные возможности
 
-**Configuration:**
+**Конфигурация:**
 ```bash
 export OPENAI_API_KEY="sk-..."
 export CAI_MODEL="gpt-4o"
 ```
 
 #### DeepSeek
-- **DeepSeek V3** - Latest version
-- **DeepSeek R1** - Reasoning focused
+- **DeepSeek V3** - Последняя версия
+- **DeepSeek R1** - Ориентирована на мышление
 
-**Configuration:**
+**Конфигурация:**
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
 export CAI_MODEL="deepseek-chat"
 ```
 
-#### Ollama (Local Models)
-- **Qwen2.5 72B** - High performance
-- **Qwen2.5 14B** - Balanced capability
-- **Llama 3.1** - Meta's latest
-- **Mistral** - Efficient and fast
-- And 100+ more local models
+#### Ollama (Локальные модели)
+- **Qwen2.5 72B** - Высокая производительность
+- **Qwen2.5 14B** - Сбалансированная возможность
+- **Llama 3.1** - Последняя версия Meta
+- **Mistral** - Эффективно и быстро
+- И 100+ других локальных моделей
 
-**Configuration:**
+**Конфигурация:**
 ```bash
 export OLLAMA_API_BASE="http://localhost:11434/v1"
 export CAI_MODEL="ollama/qwen2.5:72b"
@@ -107,133 +103,133 @@ export CAI_MODEL="ollama/qwen2.5:72b"
 
 ---
 
-## Model Selection Guide
+## Руководство по выбору модели
 
-!!! tip "📊 Based on CAIBench Research"
-    Our model recommendations are based on rigorous evaluation using [**CAIBench**](https://arxiv.org/pdf/2510.24317), a modular meta-benchmark framework for evaluating LLM models and agents across offensive and defensive cybersecurity domains.
+!!! tip "📊 На основе исследований CAIBench"
+    Наши рекомендации по моделям основаны на строгой оценке с использованием [**CAIBench**](https://arxiv.org/pdf/2510.24317), модульной мета-benchmark платформы для оценки моделей LLM и агентов в областях наступательной и оборонительной кибербезопасности.
 
-    **Research shows:** In [real-world CTF evaluations](https://arxiv.org/pdf/2510.17521), defensive agents achieved 54.3% patching success versus 28.3% offensive initial access, with `alias1` consistently outperforming general-purpose models.
+    **Исследования показывают:** В [оценке реальных CTF](https://arxiv.org/pdf/2510.17521), агенты защиты достигли 85.3% успеха исправления в сравнении с 28.3% начального доступа атакующих, `alias1` последовательно превосходит модели общего назначения.
 
-### For All Cybersecurity Work
+### Для всех работ по кибербезопасности
 
-**✅ Always Recommended:** `alias1` (CAI PRO)
-- **Best performer** in [CAIBench](https://arxiv.org/pdf/2510.24317) evaluations
-- **Unrestricted** for authorized pentesting and security research
-- **Zero refusals** - designed specifically for offensive security
-- **Unlimited tokens** included with CAI PRO subscription
-- **Superior CTF performance** - validated in real-world scenarios
-- **Beats general-purpose models** (GPT-4o, Claude 3.5) in security tasks
+**✅ Всегда рекомендуется:** `alias1` (CAI PRO)
+- **Лучший результат** в оценке [CAIBench](https://arxiv.org/pdf/2510.24317)
+- **Неограниченна** для авторизованного тестирования на проникновение и исследования безопасности
+- **Нулевые отказы** - разработана специально для наступательной безопасности
+- **Неограниченные токены** включены в подписку CAI PRO
+- **Превосходная производительность CTF** - проверено в реальных сценариях
+- **Превосходит модели общего назначения** (GPT-4o, Claude 3.5) в задачах безопасности
 
-📖 **Learn more**: [CAI research demonstrates 3,600× performance gains](https://arxiv.org/pdf/2504.06017) over manual security testing in specific scenarios.
-
----
-
-### Alternative Models (Community Edition)
-
-While `alias1` is always recommended for security work, the following models can be used with CAI Community Edition:
-
-#### For Local/Offline Testing
-
-**Alternative:** Ollama with Qwen2.5 72B
-- Complete privacy (no data leaves your machine)
-- No API costs
-- Good for testing and development
-- Requires local GPU resources
-- ⚠️ **Note:** Performance significantly below `alias1` for security tasks
-
-#### For Budget-Conscious Users
-
-**Alternative:** DeepSeek V3 or Ollama models
-- Lower API costs (DeepSeek)
-- Free local inference (Ollama)
-- Adequate performance for many tasks
-- ⚠️ **Note:** Not optimized for cybersecurity workflows
+📖 **Узнайте больше**: [Исследование CAI демонстрирует 3600-кратный рост производительности](https://arxiv.org/pdf/2504.06017) по сравнению с ручным тестированием безопасности в конкретных сценариях.
 
 ---
 
-## Additional Integrations
+### Альтернативные модели (Community Edition)
 
-CAI is compatible with multiple model platforms and providers:
+Хотя `alias1` всегда рекомендуется для работы с безопасностью, следующие модели можно использовать с CAI Community Edition:
 
-- **[OpenRouter](providers/openrouter.md)** - Access to 200+ models via unified API
-- **[Ollama](providers/ollama.md)** - Local model hosting and inference
-- **[Azure OpenAI](providers/azure.md)** - Enterprise-hosted OpenAI models
+#### Для локального/автономного тестирования
 
-See the **Model Providers** section for detailed configuration guides.
+**Альтернатива:** Ollama с Qwen2.5 72B
+- Полная приватность (данные не покидают вашу машину)
+- Нет затрат на API
+- Хорошо для тестирования и разработки
+- Требует локальные ресурсы GPU
+- ⚠️ **Примечание:** Производительность значительно ниже `alias1` для задач безопасности
+
+#### Для экономных пользователей
+
+**Альтернатива:** DeepSeek V3 или Ollama модели
+- Более низкие затраты на API (DeepSeek)
+- Бесплатный локальный вывод (Ollama)
+- Адекватная производительность для многих задач
+- ⚠️ **Примечание:** Не оптимизирована для рабочих процессов кибербезопасности
 
 ---
 
-## Comparison: alias1 vs Community Models
+## Дополнительные интеграции
 
-| Feature | alias1 (CAI PRO) | Model1 | Model2 | Model3 |
+CAI совместима с несколькими платформами моделей и поставщиками:
+
+- **[OpenRouter](providers/openrouter.md)** - Доступ к 200+ моделям через единый API
+- **[Ollama](providers/ollama.md)** - Локальный хостинг и вывод моделей
+- **[Azure OpenAI](providers/azure.md)** - Модели OpenAI с корпоративным хостингом
+
+Смотрите раздел **Model Providers** для подробных руководств по конфигурации.
+
+---
+
+## Сравнение: alias1 против Community Models
+
+| Особенность | alias1 (CAI PRO) | Model1 | Model2 | Model3 |
 |---------|------------------|--------|------------|-------------|
-| **Cybersecurity Optimization** | ✅ Native | ⚠️ General | ⚠️ General | ⚠️ General |
-| **CTF Performance** | 🏆 Best | Good | Good | Fair |
-| **Refusals** | ✅ Zero | ❌ Many | ❌ Many | ⚠️ Some |
-| **Pentesting** | ✅ Unrestricted | ❌ Limited | ❌ Limited | ⚠️ Varies |
-| **Token Limits** | ✅ Unlimited | Pay per token | Pay per token | Free (local) |
-| **Privacy** | ✅ European GDPR | ⚠️ US-based | ⚠️ US-based | ✅ Local only |
-| **Support** | ✅ Professional | Community | Community | Community |
-| **Best For** | Pro security work | General tasks | Writing/analysis | Local testing |
+| **Оптимизация кибербезопасности** | ✅ Встроенная | ⚠️ Общая | ⚠️ Общая | ⚠️ Общая |
+| **Производительность CTF** | 🏆 Лучшая | Хорошая | Хорошая | Нормальная |
+| **Отказы** | ✅ Нулевые | ❌ Много | ❌ Много | ⚠️ Различные |
+| **Тестирование на проникновение** | ✅ Неограниченное | ❌ Ограниченное | ❌ Ограниченное | ⚠️ Различается |
+| **Лимиты токенов** | ✅ Неограниченные | Оплата за токен | Оплата за токен | Бесплатно (локально) |
+| **Приватность** | ✅ Европейский GDPR | ⚠️ На базе США | ⚠️ На базе США | ✅ Только локально |
+| **Поддержка** | ✅ Профессиональная | Community | Community | Community |
+| **Лучше всего для** | Проф. работа по безопасности | Общие задачи | Письмо/анализ | Локальное тестирование |
 
 ---
 
-## Getting Started
+## Начало работы
 
-### Using alias1 (CAI PRO)
+### Использование alias1 (CAI PRO)
 
-1. **Subscribe to CAI PRO**: [Upgrade here](cai_pro.md)
-2. **Configure your environment**:
+1. **Подпишитесь на CAI PRO**: [Обновить здесь](cai_pro.md)
+2. **Настройте окружение**:
    ```bash
    export ALIAS_API_KEY="sk-your-caipro-key"
    export CAI_MODEL="alias1"
    ```
-3. **Start using CAI**:
+3. **Начните использовать CAI**:
    ```bash
    cai
    ```
 
-### Using Community Models
+### Использование Community Models
 
-1. **Get API key** from your chosen provider
-2. **Configure environment**:
+1. **Получите ключ API** от выбранного поставщика
+2. **Настройте окружение**:
    ```bash
-   export OPENAI_API_KEY="sk-..."  # or ANTHROPIC_API_KEY, etc.
-   export CAI_MODEL="gpt-4o"       # or your chosen model
+   export OPENAI_API_KEY="sk-..."  # или ANTHROPIC_API_KEY и т.д.
+   export CAI_MODEL="gpt-4o"       # или выбранная модель
    ```
-3. **Start using CAI**:
+3. **Начните использовать CAI**:
    ```bash
    cai
    ```
 
 ---
 
-## Need Help Choosing?
+## Нужна помощь в выборе?
 
-!!! success "Our Recommendation: Always Use alias1"
-    Based on [CAIBench benchmarks](https://arxiv.org/pdf/2510.24317) and [real-world CTF evaluations](https://arxiv.org/pdf/2510.17521), **`alias1` is the superior choice for all cybersecurity tasks**.
+!!! success "Наша рекомендация: Всегда используйте alias1"
+    На основе бенчмарков [CAIBench](https://arxiv.org/pdf/2510.24317) и [оценки реальных CTF](https://arxiv.org/pdf/2510.17521), **`alias1` - это превосходный выбор для всех задач кибербезопасности**.
 
-    **For any security work:** → `alias1` with [CAI PRO](cai_pro.md)
+    **Для любой работы по безопасности:** → `alias1` с [CAI PRO](cai_pro.md)
 
-### If CAI PRO is not an option:
+### Если CAI PRO невозможно:
 
-- **Privacy-focused?** → Ollama local models (lower performance)
-- **Budget-conscious?** → DeepSeek or Ollama (not optimized for security)
+- **Ориентирован на приватность?** → Локальные модели Ollama (ниже производительность)
+- **Экономный?** → DeepSeek или Ollama (не оптимизирована для безопасности)
 
-⚠️ **Note:** Community models are not optimized for cybersecurity workflows and will have significantly reduced capabilities compared to `alias1`.
+⚠️ **Примечание:** Общественные модели не оптимизированы для рабочих процессов кибербезопасности и будут иметь значительно сниженные возможности по сравнению с `alias1`.
 
 ---
 
-## Research & Validation
+## Исследования и валидация
 
-CAI's effectiveness is validated through peer-reviewed research:
+Эффективность CAI подтверждается рецензируемыми исследованиями:
 
-- 📊 [**CAIBench**](https://arxiv.org/pdf/2510.24317) - Meta-benchmark framework for cybersecurity AI evaluation
-- 🎯 [**Agentic Cybersecurity Evaluation**](https://arxiv.org/pdf/2510.17521) - Real-world CTF performance analysis
-- 🚀 [**Cybersecurity AI Framework**](https://arxiv.org/pdf/2504.06017) - Core framework demonstrating 3,600× speedup
-- 🛡️ [**Prompt Injection Defense**](https://arxiv.org/pdf/2508.21669) - Four-layer guardrail security system
-- 📚 [**CAI Fluency**](https://arxiv.org/pdf/2508.13588) - Educational framework for democratizing AI security
+- 📊 [**CAIBench**](https://arxiv.org/pdf/2510.24317) - Мета-benchmark платформа для оценки AI кибербезопасности
+- 🎯 [**Agential Cybersecurity Evaluation**](https://arxiv.org/pdf/2510.17521) - Анализ производительности реальных CTF
+- 🚀 [**Cybersecurity AI Framework**](https://arxiv.org/pdf/2504.06017) - Основная платформа, демонстрирующая 3600-кратное ускорение
+- 🛡️ [**Prompt Injection Defense**](https://arxiv.org/pdf/2508.21669) - Четырёхуровневая система защиты от инъекций подсказок
+- 📚 [**CAI Fluency**](https://arxiv.org/pdf/2508.13588) - Образовательная платформа для демократизации ИИ безопасности
 
-**Explore all research:** [Alias Robotics Research Papers](https://aliasrobotics.com/research-security.php#papers)
+**Изучите все исследования:** [Документы исследований Alias Robotics](https://aliasrobotics.com/research-security.php#papers)
 
-Questions? Check our [FAQ](cai_faq.md) or [join our Discord](https://discord.gg/fnUFcTaQAC).
+Есть вопросы? Проверьте [FAQ](cai_faq.md) или [присоединитесь к нашему Discord](https://discord.gg/fnUFcTaQAC).

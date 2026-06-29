@@ -1,92 +1,93 @@
-# CAI Queue File Feature
+# Функция очереди файлов CAI
 
-## Overview
-CAI now supports automatically loading and executing a queue of prompts from a text file on startup. This is useful for batch processing, automated workflows, or pre-loading common tasks. The prompts will be executed automatically one by one without requiring user interaction.
+## Обзор
+CAI теперь поддерживает автоматическую загрузку и выполнение очереди подсказок из текстового файла при запуске. Это полезно для пакетной обработки, автоматизированных рабочих процессов или предварительной загрузки частых задач. Подсказки будут выполняться автоматически одна за другой без требования взаимодействия пользователя.
 
-## Usage
+## Использование
 
-### 1. Set the Environment Variable
+### 1. Установите переменную окружения
 ```bash
 export CAI_QUEUE_FILE="/path/to/your/prompts.txt"
 ```
 
-### 2. Create a Queue File
-Create a text file with one prompt per line:
+### 2. Создайте файл очереди
+Создайте текстовый файл с одной подсказкой на строку:
 
 ```text
-# Comments start with # and are ignored
+# Комментарии начинаются с # и игнорируются
 /help
-What are your cybersecurity capabilities?
+Какие у вас возможности в области кибербезопасности?
 /agent list
-Scan the network 192.168.1.0/24
-Check for vulnerabilities in https://example.com
+Сканируйте сеть 192.168.1.0/24
+Проверьте на уязвимости https://example.com
 $ nmap -sV localhost
 /history
-Generate a security report
+Создайте отчет о безопасности
 ```
 
-### 3. Start CAI
-The prompts will be automatically loaded and executed when you start CAI:
+### 3. Запустите CAI
+Подсказки будут автоматически загружены и выполнены при запуске CAI:
 
 ```bash
-# Regular mode - prompts run automatically
+# Обычный режим - подсказки выполняются автоматически
 CAI_QUEUE_FILE=~/my_prompts.txt cai
 
-# TUI mode - prompts run automatically
+# Режим TUI - подсказки выполняются автоматически
 CAI_QUEUE_FILE=~/my_prompts.txt cai --tui
 ```
 
-CAI will:
-1. Load all prompts from the file
-2. Display a message showing how many prompts were loaded
-3. Automatically start processing each prompt in order
-4. Return to normal interactive mode when the queue is empty
+CAI будет:
+1. Загружать все подсказки из файла
+2. Выводить сообщение с указанием количества загруженных подсказок
+3. Автоматически начинать обработку каждой подсказки по порядку
+4. Возвращаться в обычный интерактивный режим после завершения очереди
 
-### 4. Manual Loading
-You can also load a queue file manually using the queue command:
+### 4. Ручная загрузка
+Вы также можете загрузить файл очереди вручную, используя команду queue:
 
 ```bash
 CAI> /queue load ~/another_prompts.txt
 ```
 
-## Features
+## Особенности
 
-- **Auto-loading**: Queue file is loaded automatically on startup if `CAI_QUEUE_FILE` is set
-- **Auto-execution**: Prompts are executed automatically in sequence without user interaction
-- **Comments**: Lines starting with `#` are ignored
-- **Empty lines**: Blank lines are skipped
-- **Any prompt type**: Supports commands (`/help`), shell commands (`$ ls`), bare `?` (CLI headless input shortcuts), and regular prompts
-- **Works in both modes**: Compatible with regular CLI and TUI modes
-- **Seamless transition**: Returns to interactive mode after queue is processed
+- **Автоматическое выполнение**: Подсказки выполняются автоматически при запуске CAI
+- **Пакетная обработка**: Обработка нескольких подсказок без ручного вмешательства
+- **Гибкие форматы**: Поддерживает простой текст, многострочные подсказки
+- **Отслеживание состояния**: Отслеживает прогресс через переменные окружения
+- **Команды в файле**: Поддерживает специальные команды (/help, /agent list и т.д.)
 
-## Example Queue File
+## Примеры файла очереди
 
-```text
-# Security Assessment Workflow
-# First, check the environment
-/agent list
-/model
+### Базовый пример
+```
+# Запросы о безопасности
+Что такое SQL-инъекция?
+Как защитить веб-приложение?
 
-# Network reconnaissance
-Scan the network 192.168.1.0/24 for open ports
-$ nmap -sV -p- 192.168.1.1
-
-# Web application testing
-Check https://example.com for common vulnerabilities
-Test for SQL injection on the login form
-Analyze the SSL/TLS configuration
-
-# Reporting
-Generate a comprehensive security report
-/history
+# Техническая помощь
+write a python script to check open ports
 ```
 
-## Tips
+### Расширенный пример
+```
+# Инициализация
+/agent init security_team
+/model gpt-4
 
-- Use queue files to standardize workflows across team members
-- Create different queue files for different types of assessments
-- Combine with parallel mode for concurrent execution
-- Queue items are processed in order, one at a time
-- Add `/exit` at the end to quit CAI after processing
-- You can interrupt processing at any time with Ctrl+C
-- The queue continues from where it left off if you resume
+# Сканирование безопасности
+Сканируйте целевой хост на предмет общих уязвимостей
+Generate a vulnerability report
+
+# Анализ
+Analyze the results and provide recommendations
+```
+
+## Советы и рекомендации
+
+- Используйте `#` для добавления комментариев в файл очереди
+- Пустые строки используются как разделители между подсказками
+- Путь файла может быть абсолютным или относительным
+- Файл может быть обновлен в процессе выполнения для добавления новых подсказок
+- Используйте переменные окружения для чувствительных данных (API ключи, токены)
+- Тестируйте подсказки в интерактивном режиме перед добавлением в файл очереди

@@ -1,29 +1,29 @@
-# Context management
+# Управление контекстом
 
-Context is an overloaded term. There are two main classes of context you might care about:
+Context (контекст) — перегруженный термин. Существуют два основных класса контекста, о которых вам может быть важно знать:
 
-1. Context available locally to your code: this is data and dependencies you might need when tool functions run, during callbacks like `on_handoff`, in lifecycle hooks, etc.
-2. Context available to LLMs: this is data the LLM sees when generating a response.
+1. Контекст, доступный локально вашему коду: это данные и зависимости, которые вам могут понадобиться при запуске функций инструментов, во время callbacks вроде `on_handoff`, в lifecycle hooks и т.д.
+2. Контекст, доступный LLM: это данные, которые LLM видит при генерировании ответа.
 
-## Local context
+## Локальный контекст
 
-This is represented via the [`RunContextWrapper`][cai.sdk.agents.run_context.RunContextWrapper] class and the [`context`][cai.sdk.agents.run_context.RunContextWrapper.context] property within it. The way this works is:
+Это представляется через класс [`RunContextWrapper`][cai.sdk.agents.run_context.RunContextWrapper] и свойство [`context`][cai.sdk.agents.run_context.RunContextWrapper.context] в нём. Как это работает:
 
-1. You create any Python object you want. A common pattern is to use a dataclass or a Pydantic object.
-2. You pass that object to the various run methods (e.g. `Runner.run(..., **context=whatever**))`).
-3. All your tool calls, lifecycle hooks etc will be passed a wrapper object, `RunContextWrapper[T]`, where `T` represents your context object type which you can access via `wrapper.context`.
+1. Вы создаёте любой объект Python, который хотите. Распространённый паттерн — использовать dataclass или объект Pydantic.
+2. Вы передаёте этот объект в различные методы run (например, `Runner.run(..., **context=whatever**))`).
+3. Все ваши вызовы инструментов, lifecycle hooks и т.д. получат объект-оболочку `RunContextWrapper[T]`, где `T` представляет тип вашего объекта контекста, доступный через `wrapper.context`.
 
-The **most important** thing to be aware of: every agent, tool function, lifecycle, etc for a given agent run must use the same _type_ of context.
+**Самое важное** помнить: каждый агент, функция инструмента, lifecycle и т.д. для данного запуска агента должны использовать одинаковый _тип_ контекста.
 
-You can use the context for things like:
+Вы можете использовать контекст для:
 
--   Contextual data for your run (e.g. things like a username/uid or other information about the user)
--   Dependencies (e.g. logger objects, data fetchers, etc)
--   Helper functions
+- Контекстных данных для вашего запуска (например, имя пользователя/uid или другая информация о пользователе)
+- Зависимостей (например, объекты логгера, fetchers данных и т.д.)
+- Вспомогательных функций
 
-!!! danger "Note"
+!!!danger "Примечание"
 
-    The context object is **not** sent to the LLM. It is purely a local object that you can read from, write to and call methods on it.
+    Объект контекста **не** отправляется LLM. Это чисто локальный объект, из которого вы можете читать, писать и вызывать методы.
 
 ```python
 import asyncio
@@ -61,17 +61,17 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-1. This is the context object. We've used a dataclass here, but you can use any type.
-2. This is a tool. You can see it takes a `RunContextWrapper[SecurityAlert]`. The tool implementation reads from the context.
-3. We mark the agent with the generic `SecurityAlert`, so that the typechecker can catch errors (for example, if we tried to pass a tool that took a different context type).
-4. The context is passed to the `run` function.
-5. The agent correctly calls the tool and gets the threat information.
+1. Это объект контекста. Мы использовали здесь dataclass, но вы можете использовать любой тип.
+2. Это инструмент. Видно, что он принимает `RunContextWrapper[SecurityAlert]`. Реализация инструмента читает из контекста.
+3. Мы помечаем агент с генерик `SecurityAlert`, чтобы type-checker мог перехватывать ошибки (например, если бы мы попытались передать инструмент, который требует другой тип контекста).
+4. Контекст передаётся функции `run`.
+5. Агент корректно вызывает инструмент и получает информацию об угрозе.
 
-## Agent/LLM context
+## Контекст агента/LLM
 
-When an LLM is called, the **only** data it can see is from the conversation history. This means that if you want to make some new data available to the LLM, you must do it in a way that makes it available in that history. There are a few ways to do this:
+Когда вызывается LLM, **единственные** данные, которые она может видеть — это из истории беседы. Это означает, что если вы хотите сделать новые данные доступными LLM, вы должны сделать это способом, который делает их доступными в этой истории. Есть несколько способов сделать это:
 
-1. You can add it to the Agent `instructions`. This is also known as a "system prompt" or "developer message". System prompts can be static strings, or they can be dynamic functions that receive the context and output a string. This is a common tactic for information that is always useful (for example, the user's name or the current date).
-2. Add it to the `input` when calling the `Runner.run` functions. This is similar to the `instructions` tactic, but allows you to have messages that are lower in the [chain of command](https://cdn.openai.com/spec/model-spec-2024-05-08.html#follow-the-chain-of-command).
-3. Expose it via function tools. This is useful for _on-demand_ context - the LLM decides when it needs some data, and can call the tool to fetch that data.
-4. Use retrieval or web search. These are special tools that are able to fetch relevant data from files or databases (retrieval), or from the web (web search). This is useful for "grounding" the response in relevant contextual data.
+1. Вы можете добавить это в `instructions` агента. Это также называется "system prompt" или "developer message". System prompts могут быть статическими строками, или динамическими функциями, которые получают контекст и выводят строку. Это распространённая тактика для информации, которая всегда полезна (например, имя пользователя или текущая дата).
+2. Добавить это в `input` при вызове функций `Runner.run`. Это похоже на тактику `instructions`, но позволяет вам иметь сообщения, которые находятся ниже в [цепи командования](https://cdn.openai.com/spec/model-spec-2024-05-08.html#follow-the-chain-of-command).
+3. Предоставить его через function tools. Это полезно для контекста _по требованию_ — LLM решает, когда ей нужны некоторые данные, и может вызвать инструмент для получения этих данных.
+4. Использовать retrieval или web search. Это специальные инструменты, которые могут получать релевантные данные из файлов или баз данных (retrieval) или из веб-сети (web search). Это полезно для "anchoring" ответа в релевантные контекстные данные.

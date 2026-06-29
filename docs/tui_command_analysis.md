@@ -1,161 +1,161 @@
-# CAI TUI Command Analysis: Agent, Model, and Parallel Commands
+# Анализ команд TUI CAI: команды Agent, Model и Parallel
 
-## Overview
+## Обзор
 
-This document analyzes how CAI commands like `/agent`, `/model`, and `/parallel` work in the TUI context, focusing on the distinction between global state and terminal-specific state.
+Этот документ анализирует работу команд CAI вроде `/agent`, `/model` и `/parallel` в контексте TUI, сосредотачиваясь на различии между глобальным состоянием и состоянием для каждого терминала.
 
-## Architecture
+## Архитектура
 
-### Key Components
+### Основные компоненты
 
 1. **CommandHandler** (`src/cai/tui/components/command_handler.py`)
-   - Handles CLI command execution within the TUI
-   - Intercepts console output and redirects to appropriate terminal widgets
-   - Has special handling for `/agent` and `/model` commands
+   - Обрабатывает выполнение CLI-команд внутри TUI
+   - Перехватывает вывод консоли и перенаправляет в подходящие виджеты терминала
+   - Имеет специальную обработку для команд `/agent` и `/model`
 
 2. **SessionManager** (`src/cai/tui/core/session_manager.py`)
-   - Manages overall TUI session state
-   - Coordinates multiple terminal runners
-   - Handles parallel mode coordination
-   - Methods: `update_model()`, `switch_agent()`
+   - Управляет общим состоянием сессии TUI
+   - Координирует несколько терминальных исполнителей
+   - Управляет координацией параллельного режима
+   - Методы: `update_model()`, `switch_agent()`
 
 3. **TerminalRunner** (`src/cai/tui/core/terminal_runner.py`)
-   - Manages agent execution within a single terminal
-   - Each terminal has its own agent instance and message history
-   - Methods: `switch_agent()`, `update_model()`
+   - Управляет выполнением агента внутри одного терминала
+   - У каждого терминала есть свой экземпляр агента и история сообщений
+   - Методы: `switch_agent()`, `update_model()`
 
-4. **REPL Commands** (`src/cai/repl/commands/`)
-   - `/agent` - Agent selection and management
-   - `/model` - Model selection
-   - `/parallel` - Parallel agent configuration
+4. **REPL команды** (`src/cai/repl/commands/`)
+   - `/agent` — выбор и управление агентом
+   - `/model` — выбор модели
+   - `/parallel` — настройка параллельного агента
 
-## Command Behavior Analysis
+## Анализ поведения команд
 
-### 1. `/agent` Command
+### 1. Команда `/agent`
 
-**Current Implementation:**
-- Modifies global environment variable `CAI_AGENT_TYPE`
-- Updates `AGENT_MANAGER` global state
-- Handles parallel pattern loading into `PARALLEL_CONFIGS`
+**Текущая реализация:**
+- Изменяет глобальную переменную окружения `CAI_AGENT_TYPE`
+- Обновляет глобальное состояние `AGENT_MANAGER`
+- Обрабатывает загрузку параллельных шаблонов в `PARALLEL_CONFIGS`
 
-**TUI Context Issues:**
-- The command modifies global state that affects all terminals
-- No per-terminal agent selection mechanism
-- CommandHandler has special handling but only updates local state
+**Проблемы в контексте TUI:**
+- Команда изменяет глобальное состояние, влияющее на все терминалы
+- Нет механизма выбора агента для каждого терминала
+- CommandHandler имеет специальную обработку, но обновляет только локальное состояние
 
-**Per-Terminal Requirements:**
-- Need to call `session_manager.switch_agent(agent_name, terminal_number)`
-- Should not modify global `CAI_AGENT_TYPE` when in TUI mode
-- Each terminal should maintain its own agent configuration
+**Требования для каждого терминала:**
+- Нужно вызвать `session_manager.switch_agent(agent_name, terminal_number)`
+- Не должна изменять глобальную переменную `CAI_AGENT_TYPE` в режиме TUI
+- Каждый терминал должен иметь собственную конфигурацию агента
 
-### 2. `/model` Command
+### 2. Команда `/model`
 
-**Current Implementation:**
-- Modifies global environment variable `CAI_MODEL`
-- Affects all future agent interactions globally
+**Текущая реализация:**
+- Изменяет глобальную переменную окружения `CAI_MODEL`
+- Влияет на все будущие взаимодействия агентов глобально
 
-**TUI Context Behavior:**
-- CommandHandler detects `/model` commands
-- Calls `session_manager.update_model(model_name)`
-- SessionManager updates all terminal runners with the new model
-- This is actually appropriate for model changes (typically want all terminals to use same model)
+**Поведение в контексте TUI:**
+- CommandHandler обнаруживает команды `/model`
+- Вызывает `session_manager.update_model(model_name)`
+- SessionManager обновляет всех терминальных исполнителей с новой моделью
+- Это подходящее поведение для изменения модели (обычно требуется единая модель для всех терминалов)
 
-**Working Correctly:**
-- Model updates propagate to all terminals as expected
-- Each terminal runner updates its agent's model recursively
+**Работает корректно:**
+- Обновления модели распространяются на все терминалы как ожидается
+- Каждый терминальный исполнитель рекурсивно обновляет модель своего агента
 
-### 3. `/parallel` Command
+### 3. Команда `/parallel`
 
-**Current Implementation:**
-- Manages `PARALLEL_CONFIGS` global list
-- Sets `CAI_PARALLEL` and `CAI_PARALLEL_AGENTS` environment variables
-- Configures agents for parallel execution
+**Текущая реализация:**
+- Управляет глобальным списком `PARALLEL_CONFIGS`
+- Устанавливает переменные окружения `CAI_PARALLEL` и `CAI_PARALLEL_AGENTS`
+- Настраивает агентов для параллельного выполнения
 
-**TUI Context Behavior:**
-- SessionManager detects parallel mode via `is_parallel_mode` flag
-- Distributes parallel agents across terminals (Terminal 1 = P1, Terminal 2 = P2, etc.)
-- Uses `PARALLEL_CONFIGS` to determine agent assignments
+**Поведение в контексте TUI:**
+- SessionManager обнаруживает параллельный режим через флаг `is_parallel_mode`
+- Распределяет параллельных агентов между терминалами (Терминал 1 = P1, Терминал 2 = P2 и т.д.)
+- Использует `PARALLEL_CONFIGS` для определения назначений агентов
 
-**Issues:**
-- Parallel mode is global, not per-terminal
-- Cannot have different parallel configurations in different terminals
-- `/agent` command that loads parallel patterns affects all terminals
+**Проблемы:**
+- Параллельный режим глобален, не специфичен для терминала
+- Невозможно иметь разные конфигурации параллельных агентов в разных терминалах
+- Команда `/agent`, загружающая параллельные шаблоны, влияет на все терминалы
 
-## State Management
+## Управление состоянием
 
-### Global State (Shared Across All Terminals)
-- Environment variables: `CAI_AGENT_TYPE`, `CAI_MODEL`, `CAI_PARALLEL`
-- `PARALLEL_CONFIGS` list
-- `AGENT_MANAGER` registry
-- `PARALLEL_ISOLATION` histories
+### Глобальное состояние (общее для всех терминалов)
+- Переменные окружения: `CAI_AGENT_TYPE`, `CAI_MODEL`, `CAI_PARALLEL`
+- Список `PARALLEL_CONFIGS`
+- Реестр `AGENT_MANAGER`
+- Истории `PARALLEL_ISOLATION`
 
-### Per-Terminal State
-- `TerminalRunner.agent` - Agent instance
-- `TerminalRunner.message_history` - Conversation history
-- `TerminalRunner.config` - Terminal configuration including agent_name and model
-- `TerminalConfig.parallel_config` - Parallel agent assignment
+### Состояние для каждого терминала
+- `TerminalRunner.agent` — экземпляр агента
+- `TerminalRunner.message_history` — история беседы
+- `TerminalRunner.config` — конфигурация терминала, включая agent_name и model
+- `TerminalConfig.parallel_config` — назначение параллельного агента
 
-## Recommended Fixes
+## Рекомендуемые исправления
 
-### 1. Make `/agent` Terminal-Aware in TUI Mode
+### 1. Сделать `/agent` терминально-зависимой в режиме TUI
 
 ```python
-# In command_handler.py, enhance the special handling:
+# В command_handler.py, улучшите специальную обработку:
 if cmd_name.lower() in ["/agent", "/a"] and args:
     if args[0] == "select" and len(args) > 1:
         agent_name = args[1]
-        terminal_number = self.terminal_number  # Need to add this
+        terminal_number = self.terminal_number  # Требуется добавить
         
-        # Don't modify global state in TUI mode
+        # Не изменяйте глобальное состояние в режиме TUI
         if hasattr(self, 'session_manager') and self.session_manager:
             asyncio.create_task(
                 self.session_manager.switch_agent(agent_name, terminal_number)
             )
 ```
 
-### 2. Add Terminal-Specific Agent Command
+### 2. Добавить команду для конкретного терминала
 
-Create a new command like `/terminal-agent` or modify `/agent` to accept terminal number:
-- `/agent select <name> --terminal 2` - Select agent for specific terminal
-- `/agent select <name>` - In TUI, affects only current terminal
+Создайте новую команду типа `/terminal-agent` или изменить `/agent` для принятия номера терминала:
+- `/agent select <name> --terminal 2` — выбрать агента для конкретного терминала
+- `/agent select <name>` — в TUI влияет только на текущий терминал
 
-### 3. Enhance Parallel Mode for TUI
+### 3. Расширить параллельный режим для TUI
 
-- Allow parallel configurations to be terminal-set specific
-- Each terminal could have its own parallel group
-- Terminal 1-3 could run one parallel set, Terminal 4-6 another
+- Разрешить конфигурации параллельных агентов быть специфичными для набора терминалов
+- Каждый терминал может иметь собственную группу параллельных агентов
+- Терминалы 1-3 могут запускать один параллельный набор, терминалы 4-6 другой
 
-### 4. Add TUI Context Detection
+### 4. Добавить обнаружение контекста TUI
 
-Commands should detect TUI mode and behave differently:
+Команды должны обнаруживать режим TUI и вести себя иначе:
 ```python
 def is_tui_mode():
     return os.getenv("CAI_TUI_MODE") == "true"
 
-# In agent command:
+# В команде agent:
 if not is_tui_mode():
-    # Current behavior - modify global state
+    # Текущее поведение — изменить глобальное состояние
     os.environ["CAI_AGENT_TYPE"] = agent_key
 else:
-    # TUI behavior - notify session manager
-    # Don't modify global state
+    # Поведение TUI — уведомить session manager
+    # Не изменяйте глобальное состояние
 ```
 
-## Current Workarounds
+## Текущие обходные решения
 
-1. **For Agent Selection in Specific Terminal:**
-   - Use the terminal's direct execution instead of commands
-   - Manually reinitialize terminal runners after global changes
+1. **Для выбора агента в конкретном терминале:**
+   - Используйте прямое выполнение в терминале вместо команд
+   - Вручную переинициализируйте терминальные исполнители после глобальных изменений
 
-2. **For Model Changes:**
-   - The current implementation works well for global model updates
-   - Use `/model` command normally
+2. **Для изменения модели:**
+   - Текущая реализация хорошо работает для глобальных обновлений модели
+   - Используйте команду `/model` нормально
 
-3. **For Parallel Mode:**
-   - Configure parallel agents before starting terminals
-   - Use environment variables to pre-configure
-   - Parallel mode affects all terminals as designed
+3. **Для параллельного режима:**
+   - Настройте параллельных агентов перед запуском терминалов
+   - Используйте переменные окружения для предварительной настройки
+   - Параллельный режим влияет на все терминалы по назначению
 
-## Conclusion
+## Заключение
 
-The TUI command system currently relies heavily on global state inherited from the CLI design. To support true multi-terminal workflows, commands need to be enhanced with terminal-awareness and the ability to modify per-terminal state rather than global state. The `/model` command works well as-is since model changes are typically desired globally, but `/agent` and `/parallel` need terminal-specific implementations.
+Система команд TUI в настоящее время сильно зависит от глобального состояния, унаследованного из дизайна CLI. Для поддержки настоящих многотерминальных рабочих процессов команды должны быть расширены с поддержкой терминально-зависимых операций и способностью изменять состояние для каждого терминала, а не глобальное состояние. Команда `/model` хорошо работает в своём нынешнем виде, поскольку изменения модели обычно желательны глобально, но `/agent` и `/parallel` нуждаются в реализации для конкретного терминала.
